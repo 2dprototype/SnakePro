@@ -40,13 +40,19 @@ local function hsvToRgb(h, s, v)
     return r, g, b
 end
 
-local function findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows)
+-- Find free cells considering all entities (snake, female snake, foods, power‑ups, forbidden, debug)
+local function findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake, debugItems)
     local free = {}
     for r = 1, rows do
         for c = 1, cols do
             local occ = false
             for _, seg in ipairs(snake) do
                 if seg.x == c and seg.y == r then occ = true; break end
+            end
+            if not occ and femaleSnake then
+                for _, seg in ipairs(femaleSnake) do
+                    if seg.x == c and seg.y == r then occ = true; break end
+                end
             end
             if not occ and food and food.x == c and food.y == r then occ = true end
             if not occ and powerUp and powerUp.x == c and powerUp.y == r then occ = true end
@@ -55,6 +61,11 @@ local function findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
             if not occ and forbiddenFoods then
                 for _, ff in ipairs(forbiddenFoods) do
                     if ff.x == c and ff.y == r then occ = true; break end
+                end
+            end
+            if not occ and debugItems then
+                for _, item in ipairs(debugItems) do
+                    if item.x == c and item.y == r then occ = true; break end
                 end
             end
             if not occ then table.insert(free, {x = c, y = r}) end
@@ -116,14 +127,11 @@ function SnakeGame.new()
         scoreboost = {0.9, 0.6, 0.2},
         colorchange = {0.2, 0.9, 0.6},
         devilfruit = {0.9, 0.1, 0.1},
-        -- lustfood = {0.9, 0.2, 0.5},
         lustfood = {1.0, 0.08, 0.58},
-        -- nocollision = {0.2, 0.8, 0.9},
         nocollision = {0.0, 1.0, 0.5},
         forbidden = {0.5, 0.1, 0.5},
         mate = {1.0, 0.4, 0.7},
         rainbow = {0.9, 0.1, 0.8},
-        -- wormhole = {0.1, 0.3, 0.9},
         wormhole = {0.19, 0.10, 0.20},
         whitehole = {1.0, 1.0, 1.0},
         blackhole = {0.0, 0.0, 0.0},
@@ -412,7 +420,7 @@ end
 function SnakeGame:spawnFood()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, nil, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, nil, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free > 0 then
         self.food = free[math.random(1, #free)]
     else
@@ -423,7 +431,7 @@ end
 function SnakeGame:spawnPowerUp()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, nil, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, nil, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         local typeIdx = math.random(1, #self.powerUpTypes)
@@ -448,7 +456,7 @@ end
 function SnakeGame:spawnGreenFruit()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, nil, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, nil, self.goldenFruit, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         self.greenFruit = {
@@ -463,7 +471,7 @@ end
 function SnakeGame:spawnGoldenFruit()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, nil, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, nil, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         self.goldenFruit = {
@@ -480,7 +488,7 @@ end
 function SnakeGame:spawnForbiddenFood()
     local cols = self.forbiddenCols
     local rows = self.forbiddenRows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         local type = math.random(1, 4)  -- type 4 adds time
@@ -495,7 +503,7 @@ function SnakeGame:spawnFemale()
     if self.femaleActive then return end
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, nil, self.debugItems) -- female not yet exists
     if #free < 5 then return end
 
     -- Place female snake away from player
@@ -774,6 +782,9 @@ function SnakeGame:updateFemaleAI(dt)
                         while #self.femaleSnake > 3 do table.remove(self.femaleSnake) end
                         self.femaleDirection = {x = 1, y = 0}
                         self.femaleNextDir = {x = 1, y = 0}
+                        -- Reset female color on death (revival)
+                        self.femaleDevilPermanent = false
+                        self.femaleColor = {1.0, 0.4, 0.7} -- default pink
                     end
                     return
                 end
@@ -884,11 +895,9 @@ function SnakeGame:applyPowerUpToFemale(powerUp)
         self.score = self.score + 50
         if self.score > self.highScore then self.highScore = self.score end
     elseif type == "colorchange" then
-        if self.femaleDevilPermanent then
-            self.femaleColor = self.femaleDevilColor
-        else
-            self.femaleColor = randomColor()
-        end
+        -- Override devil skin: set permanent flag to false and apply random color
+        self.femaleDevilPermanent = false
+        self.femaleColor = randomColor()
     elseif type == "devilfruit" then
         self.score = self.score + 100
         self.devilFruitEaten = self.devilFruitEaten + 1
@@ -1074,6 +1083,48 @@ end
 -- ============================================================
 -- PLAYER METHODS
 -- ============================================================
+function SnakeGame:isEmptyCell(x, y, excludeItem)
+    -- Check snake
+    for _, seg in ipairs(self.snake) do
+        if seg.x == x and seg.y == y then return false end
+    end
+    -- Check female snake
+    if self.femaleSnake then
+        for _, seg in ipairs(self.femaleSnake) do
+            if seg.x == x and seg.y == y then return false end
+        end
+    end
+    -- Check food
+    if self.food and excludeItem ~= self.food then
+        if self.food.x == x and self.food.y == y then return false end
+    end
+    -- Check powerUp
+    if self.powerUp and excludeItem ~= self.powerUp then
+        if self.powerUp.x == x and self.powerUp.y == y then return false end
+    end
+    -- Check greenFruit
+    if self.greenFruit and excludeItem ~= self.greenFruit then
+        if self.greenFruit.x == x and self.greenFruit.y == y then return false end
+    end
+    -- Check goldenFruit
+    if self.goldenFruit and excludeItem ~= self.goldenFruit then
+        if self.goldenFruit.x == x and self.goldenFruit.y == y then return false end
+    end
+    -- Check forbidden foods
+    for _, f in ipairs(self.forbiddenFoods) do
+        if excludeItem ~= f then
+            if f.x == x and f.y == y then return false end
+        end
+    end
+    -- Check debug items
+    for _, item in ipairs(self.debugItems) do
+        if excludeItem ~= item then
+            if item.x == x and item.y == y then return false end
+        end
+    end
+    return true
+end
+
 function SnakeGame:applyPowerUp(powerUp)
     local type = powerUp.type
     if type == "shorten" then
@@ -1104,13 +1155,10 @@ function SnakeGame:applyPowerUp(powerUp)
         if self.score > self.highScore then self.highScore = self.score end
         AudioManager.playSFX("task_complete", 1.0, 0.5)
     elseif type == "colorchange" then
-        if self.devilPermanent then
-            self.targetHeadColor = self.devilColor
-            self.targetBodyColor = self.devilColor
-        else
-            self.targetHeadColor = randomColor()
-            self.targetBodyColor = randomColor()
-        end
+        -- Override devil skin: set permanent flag to false and apply random color
+        self.devilPermanent = false
+        self.targetHeadColor = randomColor()
+        self.targetBodyColor = randomColor()
         self.colorChangeTimer = 1.0
         AudioManager.playSFX("tick", 1.5, 0.3)
     elseif type == "devilfruit" then
@@ -1172,7 +1220,7 @@ function SnakeGame:teleportSnake()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
     
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.femaleSnake, self.debugItems)
     if #free == 0 then return end
     
     local newHead = free[math.random(1, #free)]
@@ -1250,6 +1298,13 @@ function SnakeGame:revive()
         self.dir = { x = 1, y = 0 }
         self.nextDir = { x = 1, y = 0 }
     end
+    -- Reset color to default green on death (revival)
+    self.devilPermanent = false
+    self.targetHeadColor = {0.6, 0.95, 0.3}
+    self.targetBodyColor = {0.35, 0.85, 0.2}
+    self.snakeColors.head = {0.6, 0.95, 0.3}
+    self.snakeColors.body = {0.35, 0.85, 0.2}
+    self.colorChangeTimer = 0
     self:spawnFood()
     self.powerUp = nil
     AudioManager.playSFX("levelup", 0.8, 0.5)
@@ -1307,7 +1362,7 @@ function SnakeGame:update(dt)
         end
     end
 
-    -- Whitehole logic
+    -- Whitehole logic (attracts items to player head)
     if self.whiteholeActive then
         self.whiteholeTimer = self.whiteholeTimer - dt
         if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
@@ -1315,31 +1370,41 @@ function SnakeGame:update(dt)
             local head = self.snake[1]
             local dx = self.food.x - head.x
             local dy = self.food.y - head.y
+            local newX, newY = self.food.x, self.food.y
             if math.abs(dx) >= math.abs(dy) then
-                self.food.x = self.food.x + (dx > 0 and 1 or -1)
+                newX = self.food.x + (dx > 0 and 1 or -1)
             else
-                self.food.y = self.food.y + (dy > 0 and 1 or -1)
+                newY = self.food.y + (dy > 0 and 1 or -1)
             end
-            self.food.x = math.max(1, math.min(self.cols, self.food.x))
-            self.food.y = math.max(1, math.min(self.rows, self.food.y))
+            newX = math.max(1, math.min(self.cols, newX))
+            newY = math.max(1, math.min(self.rows, newY))
+            if self:isEmptyCell(newX, newY, self.food) then
+                self.food.x = newX
+                self.food.y = newY
+            end
         end
         if self.inForbiddenRealm then
             local head = self.snake[1]
             for _, f in ipairs(self.forbiddenFoods) do
                 local dx = f.x - head.x
                 local dy = f.y - head.y
+                local newX, newY = f.x, f.y
                 if math.abs(dx) >= math.abs(dy) then
-                    f.x = f.x + (dx > 0 and 1 or -1)
+                    newX = f.x + (dx > 0 and 1 or -1)
                 else
-                    f.y = f.y + (dy > 0 and 1 or -1)
+                    newY = f.y + (dy > 0 and 1 or -1)
                 end
-                f.x = math.max(1, math.min(self.forbiddenCols, f.x))
-                f.y = math.max(1, math.min(self.forbiddenRows, f.y))
+                newX = math.max(1, math.min(self.forbiddenCols, newX))
+                newY = math.max(1, math.min(self.forbiddenRows, newY))
+                if self:isEmptyCell(newX, newY, f) then
+                    f.x = newX
+                    f.y = newY
+                end
             end
         end
     end
 
-    -- Blackhole logic
+    -- Blackhole logic (repels items away from player head)
     if self.blackholeActive then
         self.blackholeTimer = self.blackholeTimer - dt
         if self.blackholeTimer <= 0 then self.blackholeActive = false end
@@ -1347,49 +1412,64 @@ function SnakeGame:update(dt)
         local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
         local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
         
-        local function attract(item)
+        local function repel(item)
             if item then
                 local dx = head.x - item.x
                 local dy = head.y - item.y
+                local newX, newY = item.x, item.y
                 if math.abs(dx) >= math.abs(dy) then
-                    item.x = item.x + (dx > 0 and 1 or -1)
+                    newX = item.x + (dx > 0 and 1 or -1)
                 else
-                    item.y = item.y + (dy > 0 and 1 or -1)
+                    newY = item.y + (dy > 0 and 1 or -1)
                 end
-                item.x = math.max(1, math.min(cols, item.x))
-                item.y = math.max(1, math.min(rows, item.y))
+                newX = math.max(1, math.min(cols, newX))
+                newY = math.max(1, math.min(rows, newY))
+                if self:isEmptyCell(newX, newY, item) then
+                    item.x = newX
+                    item.y = newY
+                end
             end
         end
 
-        attract(self.food)
-        attract(self.powerUp)
-        attract(self.greenFruit)
-        attract(self.goldenFruit)
+        repel(self.food)
+        repel(self.powerUp)
+        repel(self.greenFruit)
+        repel(self.goldenFruit)
 
         if self.inForbiddenRealm then
             for _, f in ipairs(self.forbiddenFoods) do
                 local dx = head.x - f.x
                 local dy = head.y - f.y
+                local newX, newY = f.x, f.y
                 if math.abs(dx) >= math.abs(dy) then
-                    f.x = f.x + (dx > 0 and 1 or -1)
+                    newX = f.x + (dx > 0 and 1 or -1)
                 else
-                    f.y = f.y + (dy > 0 and 1 or -1)
+                    newY = f.y + (dy > 0 and 1 or -1)
                 end
-                f.x = math.max(1, math.min(self.forbiddenCols, f.x))
-                f.y = math.max(1, math.min(self.forbiddenRows, f.y))
+                newX = math.max(1, math.min(self.forbiddenCols, newX))
+                newY = math.max(1, math.min(self.forbiddenRows, newY))
+                if self:isEmptyCell(newX, newY, f) then
+                    f.x = newX
+                    f.y = newY
+                end
             end
         end
         if self.femaleActive and not self.femaleInForbidden then
             local fHead = self.femaleSnake[1]
             local dx = head.x - fHead.x
             local dy = head.y - fHead.y
+            local newX, newY = fHead.x, fHead.y
             if math.abs(dx) >= math.abs(dy) then
-                fHead.x = fHead.x + (dx > 0 and 1 or -1)
+                newX = fHead.x + (dx > 0 and 1 or -1)
             else
-                fHead.y = fHead.y + (dy > 0 and 1 or -1)
+                newY = fHead.y + (dy > 0 and 1 or -1)
             end
-            fHead.x = math.max(1, math.min(self.cols, fHead.x))
-            fHead.y = math.max(1, math.min(self.rows, fHead.y))
+            newX = math.max(1, math.min(self.cols, newX))
+            newY = math.max(1, math.min(self.rows, newY))
+            if self:isEmptyCell(newX, newY, fHead) then
+                fHead.x = newX
+                fHead.y = newY
+            end
         end
     end
 
