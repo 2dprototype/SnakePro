@@ -24,9 +24,10 @@ function love.update(dt)
 end
 
 function love.draw()
-    effect(function()
-        game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
-    end)
+    -- effect(function()
+        -- game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    -- end)
+    game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 end
 
 function love.keypressed(key)
@@ -35,6 +36,26 @@ end
 
 function love.mousepressed(x, y, button)
     game:mousepressed(x, y, button)
+end
+
+function love.mousereleased(x, y, button)
+    game:mousereleased(x, y, button)
+end
+
+function love.mousemoved(x, y, dx, dy)
+    if game.mousemoved then game:mousemoved(x, y, dx, dy) end
+end
+
+function love.touchmoved(id, x, y, dx, dy, pressure)
+    if game.touchmoved then game:touchmoved(id, x, y) end
+end
+
+function love.touchpressed(id, x, y, dx, dy, pressure)
+    game:touchpressed(id, x, y)
+end
+
+function love.touchreleased(id, x, y, dx, dy, pressure)
+    game:touchreleased(id, x, y)
 end
 
 function love.quit()

@@ -40,7 +40,7 @@ local function hsvToRgb(h, s, v)
     return r, g, b
 end
 
-local function findFreeCells(snake, food, powerUp, greenFruit, forbiddenFoods, cols, rows)
+local function findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows)
     local free = {}
     for r = 1, rows do
         for c = 1, cols do
@@ -51,6 +51,7 @@ local function findFreeCells(snake, food, powerUp, greenFruit, forbiddenFoods, c
             if not occ and food and food.x == c and food.y == r then occ = true end
             if not occ and powerUp and powerUp.x == c and powerUp.y == r then occ = true end
             if not occ and greenFruit and greenFruit.x == c and greenFruit.y == r then occ = true end
+            if not occ and goldenFruit and goldenFruit.x == c and goldenFruit.y == r then occ = true end
             if not occ and forbiddenFoods then
                 for _, ff in ipairs(forbiddenFoods) do
                     if ff.x == c and ff.y == r then occ = true; break end
@@ -86,6 +87,51 @@ function SnakeGame.new()
     self.glowTimer = 0
     self.glowActive = false
     self.glowDuration = 5.0
+    
+    -- Touch and Mouse Swipe State
+    self.swipeStartX = 0
+    self.swipeStartY = 0
+    self.minSwipeDistance = 20
+    self.touchMap = {}
+    
+    -- Sweep Visual Effect State
+    self.isSwiping = false
+    self.swipeCurrentX = 0
+    self.swipeCurrentY = 0
+    self.swipeAlpha = 0
+
+    -- Color map for all items
+    self.colorMap = {
+        -- Foods
+        food = {0.95, 0.2, 0.2},
+        greenfruit = {0.5, 1.0, 0.3},
+        goldenfruit = {1.0, 0.85, 0.2},
+        
+        -- Forbidden foods
+        forbidden_food_1 = {0.95, 0.2, 0.2},   -- Red
+        forbidden_food_2 = {0.95, 0.85, 0.1},  -- Yellow
+        forbidden_food_3 = {0.8, 0.2, 0.9},    -- Purple
+        forbidden_food_4 = {0.2, 0.9, 0.9},    -- Cyan
+        
+        -- Power-ups
+        shorten = {0.8, 0.4, 0.9},
+        reverse = {0.2, 0.9, 0.9},
+        speedup = {0.9, 0.9, 0.2},
+        slowdown = {0.2, 0.4, 0.9},
+        extralife = {0.9, 0.2, 0.6},
+        scoreboost = {0.9, 0.6, 0.2},
+        colorchange = {0.2, 0.9, 0.6},
+        devilfruit = {0.9, 0.1, 0.1},
+        lustfood = {0.9, 0.2, 0.5},
+        nocollision = {0.2, 0.8, 0.9},
+        forbidden = {0.5, 0.1, 0.5},
+        mate = {1.0, 0.4, 0.7},
+        rainbow = {0.9, 0.1, 0.8},
+        wormhole = {0.1, 0.3, 0.9},
+        whitehole = {1.0, 1.0, 1.0},
+        blackhole = {0.0, 0.0, 0.0},
+        fourthwall = {0.0, 0.8, 0.8}
+    }
 
     -- Invincibility after respawn
     self.invincible = false
@@ -111,6 +157,10 @@ function SnakeGame.new()
     self.targetHeadColor = {0.6, 0.95, 0.3}
     self.targetBodyColor = {0.35, 0.85, 0.2}
     self.colorChangeTimer = 0
+
+    -- Devil fruit permanent red
+    self.devilPermanent = false
+    self.devilColor = {0.9, 0.1, 0.1}
 
     -- Rainbow mode
     self.rainbowActive = false
@@ -145,6 +195,13 @@ function SnakeGame.new()
     -- Devil's fruit count
     self.devilFruitEaten = 0
 
+    -- Golden fruit (very rare)
+    self.goldenFruit = nil
+    self.goldenFruitTimer = 0
+    self.goldenFruitDuration = 3.0
+    self.goldenFruitSpawnInterval = 30.0
+    self.goldenFruitSpawnTimer = 0
+
     -- AI female snake
     self.femaleSnake = nil
     self.femaleActive = false
@@ -169,6 +226,8 @@ function SnakeGame.new()
     self.femaleGlow = false
     self.femaleGlowTimer = 0
     self.femaleMoveTimer = 0
+    self.femaleDevilPermanent = false
+    self.femaleDevilColor = {0.9, 0.1, 0.1}
 
     -- Mating
     self.matingCooldown = 0
@@ -180,9 +239,23 @@ function SnakeGame.new()
 
     -- Power-up types (extended)
     self.powerUpTypes = {
-        "shorten", "reverse", "speedup", "slowdown", "extralife", "scoreboost",
-        "colorchange", "devilfruit", "lustfood", "nocollision", "forbidden",
-        "mate", "rainbow", "wormhole", "whitehole", "blackhole", "fourthwall"
+        "shorten", 
+        "reverse", 
+        "speedup", 
+        "slowdown", 
+        "extralife", 
+        "scoreboost",
+        "colorchange", 
+        "devilfruit", 
+        "lustfood", 
+        "nocollision", 
+        "forbidden",
+        "mate", 
+        "rainbow", 
+        "wormhole", 
+        "whitehole", 
+        "blackhole", 
+        "fourthwall"
     }
     self.powerUp = nil
     self.powerUpTimer = 0
@@ -267,6 +340,7 @@ function SnakeGame:reset()
     self.lustActive = false
     self.lustTimer = 0
     self.devilFruitEaten = 0
+    self.devilPermanent = false
     self.inForbiddenRealm = false
     self.forbiddenTimer = 0
     self.forbiddenFoods = {}
@@ -283,6 +357,9 @@ function SnakeGame:reset()
     self.fourthWallTimer = 0
     self.outsideTimer = 0
     self.debugItems = {}
+    self.goldenFruit = nil
+    self.goldenFruitTimer = 0
+    self.goldenFruitSpawnTimer = 0
 
     -- Reset female
     self.femaleActive = false
@@ -302,6 +379,8 @@ function SnakeGame:reset()
     self.matingFreeze = false
     self.matingFreezeTimer = 0
     self.shakeAmount = 0
+    self.femaleDevilPermanent = false
+    self.femaleDevilColor = {0.9, 0.1, 0.1}
 
     -- Reset green fruit
     self.greenFruit = nil
@@ -336,7 +415,7 @@ end
 function SnakeGame:spawnFood()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, nil, self.powerUp, self.greenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, nil, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free > 0 then
         self.food = free[math.random(1, #free)]
     else
@@ -347,7 +426,7 @@ end
 function SnakeGame:spawnPowerUp()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, nil, self.greenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, nil, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         local typeIdx = math.random(1, #self.powerUpTypes)
@@ -372,7 +451,7 @@ end
 function SnakeGame:spawnGreenFruit()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, nil, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, nil, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         self.greenFruit = {
@@ -384,11 +463,27 @@ function SnakeGame:spawnGreenFruit()
     end
 end
 
+function SnakeGame:spawnGoldenFruit()
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, nil, self.forbiddenFoods, cols, rows)
+    if #free > 0 then
+        local pos = free[math.random(1, #free)]
+        self.goldenFruit = {
+            x = pos.x,
+            y = pos.y,
+            timer = self.goldenFruitDuration,
+            type = math.random(1, 3) -- 1: extra life, 2: score boost, 3: invincibility
+        }
+        self.goldenFruitTimer = self.goldenFruitDuration
+    end
+end
+
 -- Spawn a forbidden food (type 1-4)
 function SnakeGame:spawnForbiddenFood()
     local cols = self.forbiddenCols
     local rows = self.forbiddenRows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free > 0 then
         local pos = free[math.random(1, #free)]
         local type = math.random(1, 4)  -- type 4 adds time
@@ -403,7 +498,7 @@ function SnakeGame:spawnFemale()
     if self.femaleActive then return end
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free < 5 then return end
 
     -- Place female snake away from player
@@ -440,6 +535,8 @@ function SnakeGame:spawnFemale()
     self.femaleTarget = nil
     self.femaleColor = {1.0, 0.4, 0.7}
     self.femaleMoveTimer = 0
+    self.femaleDevilPermanent = false
+    self.femaleDevilColor = {0.9, 0.1, 0.1}
     AudioManager.playSFX("levelup", 1.2, 0.5)
     Notifications.add("Snake", "A pink female snake appeared!", nil, 3.0)
 end
@@ -520,9 +617,13 @@ function SnakeGame:getFemaleDirection()
         end
         if self.food then table.insert(targets, self.food) end
         if self.greenFruit then table.insert(targets, self.greenFruit) end
+        if self.goldenFruit then table.insert(targets, self.goldenFruit) end
     else
-        -- Normal priority: lust food first, then green fruit, then power-ups, then food
+        -- Normal priority: golden fruit first, then lust food, green fruit, power-ups, food
         if not self.femaleInForbidden then
+            if self.goldenFruit then
+                table.insert(targets, 1, self.goldenFruit)
+            end
             if self.powerUp and self.powerUp.type == "lustfood" then
                 table.insert(targets, 1, self.powerUp)  -- highest priority
             end
@@ -541,6 +642,7 @@ function SnakeGame:getFemaleDirection()
             if self.food then table.insert(targets, self.food) end
             if self.powerUp then table.insert(targets, self.powerUp) end
             if self.greenFruit then table.insert(targets, 1, self.greenFruit) end
+            if self.goldenFruit then table.insert(targets, 1, self.goldenFruit) end
         end
     end
 
@@ -713,6 +815,12 @@ function SnakeGame:updateFemaleAI(dt)
                 Notifications.add("Snake", "Female ate LIME GREEN FRUIT! +200 and pink glow!", nil, 2.0)
                 ate = true
             end
+            if self.goldenFruit and newHead.x == self.goldenFruit.x and newHead.y == self.goldenFruit.y then
+                self:applyGoldenFruitToFemale()
+                self.goldenFruit = nil
+                self.goldenFruitTimer = 0
+                ate = true
+            end
         end
 
         -- Forbidden foods (including type 4)
@@ -766,7 +874,7 @@ function SnakeGame:applyPowerUpToFemale(powerUp)
         self.femaleDirection = { x = -self.femaleDirection.x, y = -self.femaleDirection.y }
         self.femaleNextDir = { x = self.femaleDirection.x, y = self.femaleDirection.y }
     elseif type == "speedup" then
-        self.femaleSpeedMultiplier = 1.8
+        self.femaleSpeedMultiplier = self.femaleSpeedMultiplier + 0.8
         self.femaleTempSpeedTimer = 4.0
     elseif type == "slowdown" then
         self.femaleSpeedMultiplier = 0.5
@@ -779,10 +887,16 @@ function SnakeGame:applyPowerUpToFemale(powerUp)
         self.score = self.score + 50
         if self.score > self.highScore then self.highScore = self.score end
     elseif type == "colorchange" then
-        self.femaleColor = randomColor()
+        if self.femaleDevilPermanent then
+            self.femaleColor = self.femaleDevilColor
+        else
+            self.femaleColor = randomColor()
+        end
     elseif type == "devilfruit" then
         self.score = self.score + 100
         self.devilFruitEaten = self.devilFruitEaten + 1
+        self.femaleDevilPermanent = true
+        self.femaleColor = self.femaleDevilColor
         self.femaleSpeedMultiplier = 1.5
         self.femaleTempSpeedTimer = 3.0
     elseif type == "lustfood" then
@@ -815,9 +929,31 @@ function SnakeGame:applyPowerUpToFemale(powerUp)
             self:spawnFemale()
         end
     elseif type == "rainbow" then
-        self.femaleColor = randomColor()
+        if self.femaleDevilPermanent then
+            self.femaleColor = self.femaleDevilColor
+        else
+            self.femaleColor = randomColor()
+        end
     end
     AudioManager.playSFX("tick", 1.0, 0.3)
+end
+
+function SnakeGame:applyGoldenFruitToFemale()
+    if not self.goldenFruit then return end
+    local type = self.goldenFruit.type
+    if type == 1 then
+        self.femaleLives = math.min(self.femaleLives + 1, self.femaleMaxLives)
+        Notifications.add("Snake", "Female got extra life from Golden Fruit!", nil, 2.0)
+    elseif type == 2 then
+        self.score = self.score + 500
+        if self.score > self.highScore then self.highScore = self.score end
+        Notifications.add("Snake", "Female +500 points from Golden Fruit!", nil, 2.0)
+    else
+        self.femaleInvincible = true
+        self.femaleInvincibleTimer = 5.0
+        Notifications.add("Snake", "Female got invincibility from Golden Fruit!", nil, 2.0)
+    end
+    AudioManager.playSFX("levelup", 2.0, 0.9)
 end
 
 function SnakeGame:mate()
@@ -843,6 +979,7 @@ function SnakeGame:startImmortalEnding()
     self.food = nil
     self.powerUp = nil
     self.greenFruit = nil
+    self.goldenFruit = nil
     self.forbiddenFoods = {}
     self.debugItems = {}
     self.powerUpTimer = 0
@@ -955,7 +1092,7 @@ function SnakeGame:applyPowerUp(powerUp)
         self.nextDir = { x = self.dir.x, y = self.dir.y }
         AudioManager.playSFX("tick", 0.8, 0.3)
     elseif type == "speedup" then
-        self.tempSpeedMultiplier = 1.8
+        self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.8
         self.tempSpeedTimer = 4.0
         AudioManager.playSFX("tick", 1.8, 0.3)
     elseif type == "slowdown" then
@@ -970,13 +1107,22 @@ function SnakeGame:applyPowerUp(powerUp)
         if self.score > self.highScore then self.highScore = self.score end
         AudioManager.playSFX("task_complete", 1.0, 0.5)
     elseif type == "colorchange" then
-        self.targetHeadColor = randomColor()
-        self.targetBodyColor = randomColor()
+        if self.devilPermanent then
+            self.targetHeadColor = self.devilColor
+            self.targetBodyColor = self.devilColor
+        else
+            self.targetHeadColor = randomColor()
+            self.targetBodyColor = randomColor()
+        end
         self.colorChangeTimer = 1.0
         AudioManager.playSFX("tick", 1.5, 0.3)
     elseif type == "devilfruit" then
         self.score = self.score + 100
         self.devilFruitEaten = self.devilFruitEaten + 1
+        self.devilPermanent = true
+        self.targetHeadColor = self.devilColor
+        self.targetBodyColor = self.devilColor
+        self.colorChangeTimer = 1.0
         self.tempSpeedMultiplier = 1.5
         self.tempSpeedTimer = 3.0
         AudioManager.playSFX("levelup", 1.5, 0.8)
@@ -1029,7 +1175,7 @@ function SnakeGame:teleportSnake()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
     
-    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.forbiddenFoods, cols, rows)
+    local free = findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows)
     if #free == 0 then return end
     
     local newHead = free[math.random(1, #free)]
@@ -1056,6 +1202,10 @@ function SnakeGame:enterForbiddenRealm()
     self.inForbiddenRealm = true
     self.forbiddenTimer = self.forbiddenDuration
     self.forbiddenFoods = {}
+    self.food = nil -- Remove normal food
+    self.powerUp = nil -- Remove power-ups
+    self.greenFruit = nil -- Remove green fruit
+    self.goldenFruit = nil -- Remove golden fruit
     local cols = self.forbiddenCols
     local rows = self.forbiddenRows
     for i = 1, 15 do
@@ -1072,6 +1222,9 @@ function SnakeGame:exitForbiddenRealm()
     self.powerUpTimer = 0
     self.greenFruit = nil
     self.greenFruitTimer = 0
+    self.goldenFruit = nil
+    self.goldenFruitTimer = 0
+    self:spawnFood() -- Spawn regular food when exiting
 end
 
 function SnakeGame:revive()
@@ -1120,6 +1273,11 @@ end
 -- ============================================================
 function SnakeGame:update(dt)
     if self.paused then return end
+    
+    -- Fade out sweep visual
+    if not self.isSwiping and self.swipeAlpha > 0 then
+        self.swipeAlpha = math.max(0, self.swipeAlpha - dt * 3)
+    end
 
     if self.immortalEnding then
         self:updateImmortalEnding(dt)
@@ -1214,6 +1372,7 @@ function SnakeGame:update(dt)
         attract(self.food)
         attract(self.powerUp)
         attract(self.greenFruit)
+        attract(self.goldenFruit)
 
         if self.inForbiddenRealm then
             for _, f in ipairs(self.forbiddenFoods) do
@@ -1322,33 +1481,44 @@ function SnakeGame:update(dt)
                 self.femaleForbiddenTimer = 0
             end
         end
+        -- Only spawn forbidden foods, no regular food or power-ups
         while #self.forbiddenFoods < 15 do self:spawnForbiddenFood() end
-        if not self.food then self:spawnFood() end
-        if not self.powerUp and math.random() < 0.02 then self:spawnPowerUp() end
-        if not self.greenFruit and math.random() < 0.01 then self:spawnGreenFruit() end
-    end
-
-    if not self.powerUp then
-        self.powerUpSpawnTimer = self.powerUpSpawnTimer + dt
-        if self.powerUpSpawnTimer >= self.powerUpSpawnInterval then
-            self.powerUpSpawnTimer = 0
-            self:spawnPowerUp()
-        end
     else
-        self.powerUpTimer = self.powerUpTimer - dt
-        self.powerUp.blink = (self.powerUp.blink or 0) + dt
-        if self.powerUpTimer <= 0 then self.powerUp = nil end
-    end
-
-    if not self.greenFruit then
-        self.greenFruitSpawnTimer = self.greenFruitSpawnTimer + dt
-        if self.greenFruitSpawnTimer >= self.greenFruitSpawnInterval then
-            self.greenFruitSpawnTimer = 0
-            self:spawnGreenFruit()
+        -- Normal spawning outside forbidden realm
+        if not self.powerUp then
+            self.powerUpSpawnTimer = self.powerUpSpawnTimer + dt
+            if self.powerUpSpawnTimer >= self.powerUpSpawnInterval then
+                self.powerUpSpawnTimer = 0
+                self:spawnPowerUp()
+            end
+        else
+            self.powerUpTimer = self.powerUpTimer - dt
+            self.powerUp.blink = (self.powerUp.blink or 0) + dt
+            if self.powerUpTimer <= 0 then self.powerUp = nil end
         end
-    else
-        self.greenFruitTimer = self.greenFruitTimer - dt
-        if self.greenFruitTimer <= 0 then self.greenFruit = nil end
+
+        if not self.greenFruit then
+            self.greenFruitSpawnTimer = self.greenFruitSpawnTimer + dt
+            if self.greenFruitSpawnTimer >= self.greenFruitSpawnInterval then
+                self.greenFruitSpawnTimer = 0
+                self:spawnGreenFruit()
+            end
+        else
+            self.greenFruitTimer = self.greenFruitTimer - dt
+            if self.greenFruitTimer <= 0 then self.greenFruit = nil end
+        end
+
+        -- Golden fruit spawn (very rare)
+        if not self.goldenFruit then
+            self.goldenFruitSpawnTimer = self.goldenFruitSpawnTimer + dt
+            if self.goldenFruitSpawnTimer >= self.goldenFruitSpawnInterval then
+                self.goldenFruitSpawnTimer = 0
+                self:spawnGoldenFruit()
+            end
+        else
+            self.goldenFruitTimer = self.goldenFruitTimer - dt
+            if self.goldenFruitTimer <= 0 then self.goldenFruit = nil end
+        end
     end
 
     self:updateFemaleAI(dt)
@@ -1422,8 +1592,7 @@ function SnakeGame:update(dt)
                 end
                 AudioManager.playSFX("glitch", 1.2, 0.4)
                 return
-            end
-        end
+            end        end
 
         table.insert(self.snake, 1, newHead)
 
@@ -1456,6 +1625,12 @@ function SnakeGame:update(dt)
                 Notifications.add("Snake", "LIME GREEN FRUIT! +200 points and glow!", nil, 2.0)
                 ate = true
             end
+            if self.goldenFruit and newHead.x == self.goldenFruit.x and newHead.y == self.goldenFruit.y then
+                self:applyGoldenFruit()  -- uses self.goldenFruit
+                self.goldenFruit = nil
+                self.goldenFruitTimer = 0
+                ate = true
+            end
             for i = #self.debugItems, 1, -1 do
                 local item = self.debugItems[i]
                 if newHead.x == item.x and newHead.y == item.y then
@@ -1467,6 +1642,22 @@ function SnakeGame:update(dt)
                         self.glowActive = true
                         self.glowTimer = self.glowDuration
                         AudioManager.playSFX("levelup", 1.8, 0.8)
+                    elseif item.type == "goldenfruit" then
+                        self:applyGoldenFruit(item)  -- pass debug item
+                    elseif item.type == "forbidden_food" then
+                        -- Handle forbidden food types from debug
+                        local ftype = item.food_type or 1
+                        if ftype == 4 then
+                            self.forbiddenTimer = math.min(self.forbiddenTimer + 2.0, 12.0)
+                            AudioManager.playSFX("levelup", 1.0, 0.6)
+                            Notifications.add("Snake", "+2s in Forbidden Realm!", nil, 1.5)
+                        else
+                            local points = ftype == 1 and 15 or (ftype == 2 and 30 or 50)
+                            if self.lustActive then points = points * self.lustMultiplier end
+                            self.score = self.score + points
+                            if self.score > self.highScore then self.highScore = self.score end
+                            AudioManager.playSFX("tick", 1.5 + ftype * 0.2, 0.5)
+                        end
                     else
                         self:applyPowerUp(item)
                     end
@@ -1475,33 +1666,7 @@ function SnakeGame:update(dt)
                 end
             end
         else
-            if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
-                local points = 10
-                if self.lustActive then points = points * self.lustMultiplier end
-                self.score = self.score + points
-                if self.score > self.highScore then self.highScore = self.score end
-                self.baseSpeed = math.max(0.06, 0.12 - math.floor(self.score / 50) * 0.01)
-                self.speed = self.baseSpeed
-                AudioManager.playSFX("tick", 1.5, 0.5)
-                self:spawnFood()
-                ate = true
-            end
-            if self.powerUp and newHead.x == self.powerUp.x and newHead.y == self.powerUp.y then
-                self:applyPowerUp(self.powerUp)
-                self.powerUp = nil
-                ate = true
-            end
-            if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
-                self.score = self.score + 200
-                if self.score > self.highScore then self.highScore = self.score end
-                self.glowActive = true
-                self.glowTimer = self.glowDuration
-                self.greenFruit = nil
-                self.greenFruitTimer = 0
-                AudioManager.playSFX("levelup", 1.8, 0.8)
-                Notifications.add("Snake", "LIME GREEN FRUIT! +200 points and glow!", nil, 2.0)
-                ate = true
-            end
+            -- In forbidden realm: only forbidden foods can be eaten
             for i = #self.forbiddenFoods, 1, -1 do
                 local f = self.forbiddenFoods[i]
                 if newHead.x == f.x and newHead.y == f.y then
@@ -1536,6 +1701,35 @@ function SnakeGame:update(dt)
             end
         end
     end
+end
+
+-- FIXED: applyGoldenFruit now accepts an optional fruit parameter
+function SnakeGame:applyGoldenFruit(fruit)
+    fruit = fruit or self.goldenFruit
+    if not fruit then return end
+    local type = fruit.type
+    if type == 1 then
+        self.lives = math.min(self.lives + 1, self.maxLives)
+        Notifications.add("Snake", "GOLDEN FRUIT! Extra life!", nil, 2.0)
+    elseif type == 2 then
+        self.score = self.score + 500
+        if self.score > self.highScore then self.highScore = self.score end
+        Notifications.add("Snake", "GOLDEN FRUIT! +500 points!", nil, 2.0)
+    else
+        self.invincible = true
+        self.invincibleTimer = 5.0
+        Notifications.add("Snake", "GOLDEN FRUIT! Invincibility!", nil, 2.0)
+    end
+    AudioManager.playSFX("levelup", 2.0, 0.9)
+end
+
+-- Helper function to get color from color map
+function SnakeGame:getItemColor(type, subtype)
+    if type == "forbidden_food" then
+        local key = "forbidden_food_" .. tostring(subtype or 1)
+        return self.colorMap[key] or self.colorMap.forbidden_food_1
+    end
+    return self.colorMap[type] or {1, 1, 1}
 end
 
 -- ============================================================
@@ -1651,6 +1845,9 @@ function SnakeGame:draw(x, y, width, height)
     if self.fourthWallActive then
         statuses[#statuses+1] = {text = "4W", color = {0.0, 0.8, 0.8}}
     end
+    if self.devilPermanent then
+        statuses[#statuses+1] = {text = "DEVIL", color = {0.9, 0.1, 0.1}}
+    end
 
     for _, st in ipairs(statuses) do
         love.graphics.setColor(st.color)
@@ -1720,63 +1917,38 @@ function SnakeGame:draw(x, y, width, height)
         end
     end
 
-    -- Food (unchanged)
-    if self.food then
+    -- Food (only show if not in forbidden realm)
+    if self.food and not self.inForbiddenRealm then
         local fx = boardX + (self.food.x - 1) * self.gridSize * scale
         local fy = boardY + (self.food.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        love.graphics.setColor(0.95, 0.2, 0.2)
+        local color = self.colorMap.food
+        love.graphics.setColor(color[1], color[2], color[3])
         love.graphics.rectangle("fill", fx + 2, fy + 2, size - 4, size - 4, 3, 3)
-        love.graphics.setColor(0.8, 0.1, 0.1)
+        love.graphics.setColor(color[1] * 0.8, color[2] * 0.5, color[3] * 0.5)
         love.graphics.rectangle("fill", fx + 4, fy + 4, size - 8, size - 8, 2, 2)
     end
 
-    -- Forbidden foods (unchanged)
+    -- Forbidden foods (using color map)
     if self.inForbiddenRealm then
         for _, f in ipairs(self.forbiddenFoods) do
             local fx = boardX + (f.x - 1) * self.gridSize * scale
             local fy = boardY + (f.y - 1) * self.gridSize * scale
             local size = self.gridSize * scale
-            if f.type == 1 then
-                love.graphics.setColor(0.95, 0.2, 0.2)
-            elseif f.type == 2 then
-                love.graphics.setColor(0.95, 0.85, 0.1)
-            elseif f.type == 3 then
-                love.graphics.setColor(0.8, 0.2, 0.9)
-            else
-                love.graphics.setColor(0.2, 0.9, 0.9)
-            end
+            local color = self:getItemColor("forbidden_food", f.type)
+            love.graphics.setColor(color[1], color[2], color[3])
             love.graphics.rectangle("fill", fx + 1, fy + 1, size - 2, size - 2, 4, 4)
             love.graphics.setColor(1, 1, 1, 0.15)
             love.graphics.rectangle("fill", fx - 2, fy - 2, size + 4, size + 4, 6, 6)
         end
     end
 
-    -- Power‑up (unchanged)
-    if self.powerUp then
+    -- Power‑up (only show if not in forbidden realm)
+    if self.powerUp and not self.inForbiddenRealm then
         local px = boardX + (self.powerUp.x - 1) * self.gridSize * scale
         local py = boardY + (self.powerUp.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local type = self.powerUp.type
-        local color
-        if type == "shorten" then color = {0.8, 0.4, 0.9}
-        elseif type == "reverse" then color = {0.2, 0.9, 0.9}
-        elseif type == "speedup" then color = {0.9, 0.9, 0.2}
-        elseif type == "slowdown" then color = {0.2, 0.4, 0.9}
-        elseif type == "extralife" then color = {0.9, 0.2, 0.6}
-        elseif type == "scoreboost" then color = {0.9, 0.6, 0.2}
-        elseif type == "colorchange" then color = {0.2, 0.9, 0.6}
-        elseif type == "devilfruit" then color = {0.9, 0.1, 0.1}
-        elseif type == "lustfood" then color = {0.9, 0.2, 0.5}
-        elseif type == "nocollision" then color = {0.2, 0.8, 0.9}
-        elseif type == "forbidden" then color = {0.5, 0.1, 0.5}
-        elseif type == "mate" then color = {1.0, 0.4, 0.7}
-        elseif type == "rainbow" then color = {0.9, 0.1, 0.8}
-        elseif type == "wormhole" then color = {0.1, 0.3, 0.9}
-        elseif type == "whitehole" then color = {1.0, 1.0, 1.0}
-        elseif type == "blackhole" then color = {0.0, 0.0, 0.0}
-        elseif type == "fourthwall" then color = {0.0, 0.8, 0.8}
-        end
+        local color = self.colorMap[self.powerUp.type] or {1, 1, 1}
         local alpha = 1
         if self.powerUpTimer < 2 and math.floor(self.powerUp.blink * 4) % 2 == 0 then
             alpha = 0.4
@@ -1787,41 +1959,45 @@ function SnakeGame:draw(x, y, width, height)
         love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 6, 6)
     end
 
-    -- Debug items (unchanged)
+    -- Debug items (using color map)
     for _, item in ipairs(self.debugItems) do
         local ix = boardX + (item.x - 1) * self.gridSize * scale
         local iy = boardY + (item.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        if item.type == "food" then
-            love.graphics.setColor(0.95, 0.2, 0.2)
-            love.graphics.rectangle("fill", ix + 2, iy + 2, size - 4, size - 4, 3, 3)
-        elseif item.type == "greenfruit" then
-            love.graphics.setColor(0.5, 1.0, 0.3, 0.25)
-            love.graphics.rectangle("fill", ix - 4, iy - 4, size + 8, size + 8, 6, 6)
-            love.graphics.setColor(0.5, 1.0, 0.3)
-            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
-            love.graphics.setColor(0.3, 0.8, 0.2)
-            love.graphics.rectangle("fill", ix + 3, iy + 3, size - 8, size - 8, 2, 2)
+        local color
+        
+        if item.type == "forbidden_food" then
+            color = self:getItemColor("forbidden_food", item.food_type)
         else
-            local color
-            if item.type == "shorten" then color = {0.8, 0.4, 0.9}
-            elseif item.type == "reverse" then color = {0.2, 0.9, 0.9}
-            elseif item.type == "speedup" then color = {0.9, 0.9, 0.2}
-            elseif item.type == "slowdown" then color = {0.2, 0.4, 0.9}
-            elseif item.type == "extralife" then color = {0.9, 0.2, 0.6}
-            elseif item.type == "scoreboost" then color = {0.9, 0.6, 0.2}
-            elseif item.type == "colorchange" then color = {0.2, 0.9, 0.6}
-            elseif item.type == "devilfruit" then color = {0.9, 0.1, 0.1}
-            elseif item.type == "lustfood" then color = {0.9, 0.2, 0.5}
-            elseif item.type == "nocollision" then color = {0.2, 0.8, 0.9}
-            elseif item.type == "forbidden" then color = {0.5, 0.1, 0.5}
-            elseif item.type == "mate" then color = {1.0, 0.4, 0.7}
-            elseif item.type == "rainbow" then color = {0.9, 0.1, 0.8}
-            elseif item.type == "wormhole" then color = {0.1, 0.3, 0.9}
-            elseif item.type == "whitehole" then color = {1.0, 1.0, 1.0}
-            elseif item.type == "blackhole" then color = {0.0, 0.0, 0.0}
-            elseif item.type == "fourthwall" then color = {0.0, 0.8, 0.8}
-            end
+            color = self.colorMap[item.type] or {1, 1, 1}
+        end
+        
+        if item.type == "food" then
+            love.graphics.setColor(color[1], color[2], color[3])
+            love.graphics.rectangle("fill", ix + 2, iy + 2, size - 4, size - 4, 3, 3)
+            love.graphics.setColor(color[1] * 0.8, color[2] * 0.5, color[3] * 0.5)
+            love.graphics.rectangle("fill", ix + 4, iy + 4, size - 8, size - 8, 2, 2)
+        elseif item.type == "greenfruit" then
+            love.graphics.setColor(color[1], color[2], color[3], 0.25)
+            love.graphics.rectangle("fill", ix - 4, iy - 4, size + 8, size + 8, 6, 6)
+            love.graphics.setColor(color[1], color[2], color[3])
+            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
+            love.graphics.setColor(color[1] * 0.6, color[2] * 0.8, color[3] * 0.6)
+            love.graphics.rectangle("fill", ix + 3, iy + 3, size - 8, size - 8, 2, 2)
+        elseif item.type == "goldenfruit" then
+            love.graphics.setColor(color[1], color[2], color[3], 0.3)
+            love.graphics.rectangle("fill", ix - 6, iy - 6, size + 12, size + 12, 8, 8)
+            love.graphics.setColor(color[1], color[2], color[3])
+            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
+            love.graphics.setColor(color[1] * 0.9, color[2] * 0.8, color[3] * 0.5)
+            love.graphics.rectangle("fill", ix + 3, iy + 3, size - 8, size - 8, 2, 2)
+        elseif item.type == "forbidden_food" then
+            love.graphics.setColor(color[1], color[2], color[3])
+            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
+            love.graphics.setColor(1, 1, 1, 0.15)
+            love.graphics.rectangle("fill", ix - 2, iy - 2, size + 4, size + 4, 6, 6)
+        else
+            -- Regular power-up
             love.graphics.setColor(color[1], color[2], color[3], 1)
             love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
             love.graphics.setColor(color[1], color[2], color[3], 0.3)
@@ -1829,17 +2005,37 @@ function SnakeGame:draw(x, y, width, height)
         end
     end
 
-    -- Green fruit (unchanged)
-    if self.greenFruit then
+    -- Green fruit (only show if not in forbidden realm)
+    if self.greenFruit and not self.inForbiddenRealm then
         local gx = boardX + (self.greenFruit.x - 1) * self.gridSize * scale
         local gy = boardY + (self.greenFruit.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        love.graphics.setColor(0.5, 1.0, 0.3, 0.25)
+        local color = self.colorMap.greenfruit
+        love.graphics.setColor(color[1], color[2], color[3], 0.25)
         love.graphics.rectangle("fill", gx - 4, gy - 4, size + 8, size + 8, 6, 6)
-        love.graphics.setColor(0.5, 1.0, 0.3)
+        love.graphics.setColor(color[1], color[2], color[3])
         love.graphics.rectangle("fill", gx + 1, gy + 1, size - 2, size - 2, 4, 4)
-        love.graphics.setColor(0.3, 0.8, 0.2)
+        love.graphics.setColor(color[1] * 0.6, color[2] * 0.8, color[3] * 0.6)
         love.graphics.rectangle("fill", gx + 3, gy + 3, size - 8, size - 8, 2, 2)
+    end
+
+    -- Golden fruit (very rare, glowing)
+    if self.goldenFruit and not self.inForbiddenRealm then
+        local gx = boardX + (self.goldenFruit.x - 1) * self.gridSize * scale
+        local gy = boardY + (self.goldenFruit.y - 1) * self.gridSize * scale
+        local size = self.gridSize * scale
+        local color = self.colorMap.goldenfruit
+        -- Glow effect
+        love.graphics.setColor(color[1], color[2], color[3], 0.3 + math.sin(love.timer.getTime() * 4) * 0.15)
+        love.graphics.rectangle("fill", gx - 6, gy - 6, size + 12, size + 12, 8, 8)
+        love.graphics.setColor(color[1], color[2], color[3])
+        love.graphics.rectangle("fill", gx + 1, gy + 1, size - 2, size - 2, 4, 4)
+        love.graphics.setColor(color[1] * 0.9, color[2] * 0.8, color[3] * 0.5)
+        love.graphics.rectangle("fill", gx + 3, gy + 3, size - 8, size - 8, 2, 2)
+        -- Sparkle effect
+        love.graphics.setColor(1.0, 1.0, 0.8, 0.6)
+        love.graphics.rectangle("fill", gx + size * 0.3, gy + size * 0.2, 2, 2)
+        love.graphics.rectangle("fill", gx + size * 0.7, gy + size * 0.7, 2, 2)
     end
 
     -- Draw player snake
@@ -1878,7 +2074,11 @@ function SnakeGame:draw(x, y, width, height)
                     love.graphics.setColor(r, g, b)
                 else
                     if i == 1 then
-                        love.graphics.setColor(color)
+                        if self.devilPermanent then
+                            love.graphics.setColor(self.devilColor)
+                        else
+                            love.graphics.setColor(color)
+                        end
                     else
                         if self.immortalEnding then
                             local t = self.immortalProgress
@@ -1889,7 +2089,11 @@ function SnakeGame:draw(x, y, width, height)
                             end
                             love.graphics.setColor(bodyColor)
                         else
-                            love.graphics.setColor(self.snakeColors.body)
+                            if self.devilPermanent then
+                                love.graphics.setColor(self.devilColor)
+                            else
+                                love.graphics.setColor(self.snakeColors.body)
+                            end
                         end
                     end
                 end
@@ -1922,9 +2126,17 @@ function SnakeGame:draw(x, y, width, height)
                     love.graphics.rectangle("fill", sx - 2, sy - 2, size + 4, size + 4, 6, 6)
                 end
                 if i == 1 then
-                    love.graphics.setColor(self.femaleColor)
+                    if self.femaleDevilPermanent then
+                        love.graphics.setColor(self.femaleDevilColor)
+                    else
+                        love.graphics.setColor(self.femaleColor)
+                    end
                 else
-                    love.graphics.setColor(self.femaleColor[1] * 0.7, self.femaleColor[2] * 0.7, self.femaleColor[3] * 0.7)
+                    if self.femaleDevilPermanent then
+                        love.graphics.setColor(self.femaleDevilColor[1] * 0.7, self.femaleDevilColor[2] * 0.7, self.femaleDevilColor[3] * 0.7)
+                    else
+                        love.graphics.setColor(self.femaleColor[1] * 0.7, self.femaleColor[2] * 0.7, self.femaleColor[3] * 0.7)
+                    end
                 end
                 love.graphics.rectangle("fill", sx + 1, sy + 1, size - 2, size - 2, 3, 3)
                 love.graphics.setColor(1.0, 0.7, 0.9, 0.2)
@@ -1970,7 +2182,22 @@ function SnakeGame:draw(x, y, width, height)
             love.graphics.printf("Mate Count: " .. self.mateCount, boardX, boardY + boardH / 2 + 78, boardW, "center")
         end
     end
-
+    
+    -- Draw Sweep/Swipe Trail
+    if (self.isSwiping or self.swipeAlpha > 0) and self.swipeStartX then
+        love.graphics.setColor(1.0, 1.0, 1.0, self.swipeAlpha) -- Changed from (0.35, 0.85, 1.0) to white
+        love.graphics.setLineWidth(4)
+        
+        -- Draw the trailing line
+        love.graphics.line(self.swipeStartX, self.swipeStartY, self.swipeCurrentX, self.swipeCurrentY)
+        
+        -- Draw end caps for a polished look
+        love.graphics.circle("fill", self.swipeStartX, self.swipeStartY, 4)
+        love.graphics.circle("fill", self.swipeCurrentX, self.swipeCurrentY, 6)
+        
+        love.graphics.setLineWidth(1) -- reset
+    end
+    
     love.graphics.pop()
 end
 
@@ -2025,30 +2252,199 @@ function SnakeGame:keypressed(key)
     return false
 end
 
-function SnakeGame:mousepressed(mx, my, button)
-    if self.gameOver and button == 1 then
+function SnakeGame:handleSwipe(dx, dy)
+    -- Restart game on tap/swipe if game over
+    if self.gameOver then
         self:reset()
+        return
+    end
+
+    local absX = math.abs(dx)
+    local absY = math.abs(dy)
+
+    -- Ignore small accidental taps/drags
+    if math.max(absX, absY) < self.minSwipeDistance then
+        return
+    end
+
+    -- Determine primary swipe direction
+    if absX > absY then
+        if dx > 0 and self.dir.x == 0 then
+            self.nextDir = { x = 1, y = 0 }
+        elseif dx < 0 and self.dir.x == 0 then
+            self.nextDir = { x = -1, y = 0 }
+        end
+    else
+        if dy > 0 and self.dir.y == 0 then
+            self.nextDir = { x = 0, y = 1 }
+        elseif dy < 0 and self.dir.y == 0 then
+            self.nextDir = { x = 0, y = -1 }
+        end
+    end
+end
+
+-- Mouse sweep tracking
+function SnakeGame:mousepressed(x, y, button)
+    if button == 1 then
+        self.swipeStartX = x
+        self.swipeStartY = y
+        self.swipeCurrentX = x
+        self.swipeCurrentY = y
+        self.isSwiping = true
+        self.swipeAlpha = 0.6
         return true
     end
     return false
 end
 
+function SnakeGame:mousemoved(x, y, dx, dy)
+    if self.isSwiping then
+        self.swipeCurrentX = x
+        self.swipeCurrentY = y
+    end
+end
+
+function SnakeGame:mousereleased(x, y, button)
+    if button == 1 then
+        local dx = x - self.swipeStartX
+        local dy = y - self.swipeStartY
+        self:handleSwipe(dx, dy)
+        self.isSwiping = false
+        return true
+    end
+    return false
+end
+
+-- Touch sweep tracking
+function SnakeGame:touchpressed(id, x, y)
+    self.touchMap = self.touchMap or {}
+    self.touchMap[id] = { startX = x, startY = y, currX = x, currY = y }
+    
+    -- Use the primary touch for the visual sweep
+    self.swipeStartX = x
+    self.swipeStartY = y
+    self.swipeCurrentX = x
+    self.swipeCurrentY = y
+    self.isSwiping = true
+    self.swipeAlpha = 0.6
+    return true
+end
+
+function SnakeGame:touchmoved(id, x, y)
+    if self.touchMap and self.touchMap[id] then
+        self.touchMap[id].currX = x
+        self.touchMap[id].currY = y
+        self.swipeCurrentX = x
+        self.swipeCurrentY = y
+    end
+end
+
+function SnakeGame:touchreleased(id, x, y)
+    if self.touchMap and self.touchMap[id] then
+        local startPos = self.touchMap[id]
+        local dx = x - startPos.startX
+        local dy = y - startPos.startY
+        self:handleSwipe(dx, dy)
+        self.touchMap[id] = nil
+        self.isSwiping = false
+        return true
+    end
+    return false
+end
+
+
 function SnakeGame:spawnDebugItems()
     self.debugItems = {}
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    local y = 1
-    local x = 1
-    table.insert(self.debugItems, {x = x, y = y, type = "food"})
-    x = x + 1
-    table.insert(self.debugItems, {x = x, y = y, type = "greenfruit"})
-    x = x + 1
+    
+    -- Create a list of all item types (one of each)
+    local itemTypes = {
+        "food",
+        "greenfruit",
+        "goldenfruit"
+    }
+    
+    -- Add all power-up types
     for _, ptype in ipairs(self.powerUpTypes) do
-        if x <= cols then
-            table.insert(self.debugItems, {x = x, y = y, type = ptype})
-            x = x + 1
+        table.insert(itemTypes, ptype)
+    end
+    
+    -- Add forbidden realm foods (types 1-4)
+    table.insert(itemTypes, "forbidden_food_1")
+    table.insert(itemTypes, "forbidden_food_2")
+    table.insert(itemTypes, "forbidden_food_3")
+    table.insert(itemTypes, "forbidden_food_4")
+    
+    -- Shuffle the items
+    for i = #itemTypes, 2, -1 do
+        local j = math.random(i)
+        itemTypes[i], itemTypes[j] = itemTypes[j], itemTypes[i]
+    end
+    
+    -- Collect all free cells
+    local freeCells = {}
+    for y = 1, rows do
+        for x = 1, cols do
+            local occupied = false
+            for _, seg in ipairs(self.snake) do
+                if seg.x == x and seg.y == y then
+                    occupied = true
+                    break
+                end
+            end
+            if not occupied then
+                table.insert(freeCells, {x = x, y = y})
+            end
         end
     end
+    
+    -- Place items on free cells
+    local itemsPlaced = 0
+    for i, pos in ipairs(freeCells) do
+        if i <= #itemTypes then
+            local itemType = itemTypes[i]
+            -- Check if it's a forbidden food type
+            if itemType == "forbidden_food_1" then
+                table.insert(self.debugItems, {
+                    x = pos.x,
+                    y = pos.y,
+                    type = "forbidden_food",
+                    food_type = 1
+                })
+            elseif itemType == "forbidden_food_2" then
+                table.insert(self.debugItems, {
+                    x = pos.x,
+                    y = pos.y,
+                    type = "forbidden_food",
+                    food_type = 2
+                })
+            elseif itemType == "forbidden_food_3" then
+                table.insert(self.debugItems, {
+                    x = pos.x,
+                    y = pos.y,
+                    type = "forbidden_food",
+                    food_type = 3
+                })
+            elseif itemType == "forbidden_food_4" then
+                table.insert(self.debugItems, {
+                    x = pos.x,
+                    y = pos.y,
+                    type = "forbidden_food",
+                    food_type = 4
+                })
+            else
+                table.insert(self.debugItems, {
+                    x = pos.x,
+                    y = pos.y,
+                    type = itemType
+                })
+            end
+            itemsPlaced = itemsPlaced + 1
+        end
+    end
+    
+    print("Placed " .. itemsPlaced .. " debug items (one of each type, including forbidden foods)")
 end
 
 return SnakeGame
