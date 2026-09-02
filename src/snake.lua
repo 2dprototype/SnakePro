@@ -102,7 +102,7 @@ function SnakeGame.new()
         goldenfruit = {1.0, 0.85, 0.2},
         
         -- Forbidden foods
-        forbidden_food_1 = {0.95, 0.2, 0.2},   -- Red
+        forbidden_food_1 = {0.13, 0.55, 0.13}, -- green
         forbidden_food_2 = {0.95, 0.85, 0.1},  -- Yellow
         forbidden_food_3 = {0.8, 0.2, 0.9},    -- Purple
         forbidden_food_4 = {0.2, 0.9, 0.9},    -- Cyan
@@ -116,12 +116,15 @@ function SnakeGame.new()
         scoreboost = {0.9, 0.6, 0.2},
         colorchange = {0.2, 0.9, 0.6},
         devilfruit = {0.9, 0.1, 0.1},
-        lustfood = {0.9, 0.2, 0.5},
-        nocollision = {0.2, 0.8, 0.9},
+        -- lustfood = {0.9, 0.2, 0.5},
+        lustfood = {1.0, 0.08, 0.58},
+        -- nocollision = {0.2, 0.8, 0.9},
+        nocollision = {0.0, 1.0, 0.5},
         forbidden = {0.5, 0.1, 0.5},
         mate = {1.0, 0.4, 0.7},
         rainbow = {0.9, 0.1, 0.8},
-        wormhole = {0.1, 0.3, 0.9},
+        -- wormhole = {0.1, 0.3, 0.9},
+        wormhole = {0.19, 0.10, 0.20},
         whitehole = {1.0, 1.0, 1.0},
         blackhole = {0.0, 0.0, 0.0},
         fourthwall = {0.0, 0.8, 0.8}
@@ -1045,7 +1048,7 @@ function SnakeGame:updateImmortalEnding(dt)
 
             self.immortalFlash = 1.5
             self.gameOver = true
-            self.gameOverMessage = "Snake became immortal"
+            self.gameOverMessage = "SNAKE BECAME IMMORTAL"
             
             if self.score > self.highScore then
                 self.highScore = self.score
@@ -1932,20 +1935,116 @@ function SnakeGame:draw(x, y, width, height)
         end
     end
 
+    -- Helper function to draw rainbow power-up
+    local function drawRainbowPowerUp(px, py, size, alpha, isDebug)
+        -- 7 rainbow colors (ROYGBIV)
+        local rainbowColors = {
+            {1.0, 0.0, 0.0},     -- Red
+            {1.0, 0.5, 0.0},     -- Orange
+            {1.0, 1.0, 0.0},     -- Yellow
+            {0.0, 1.0, 0.0},     -- Green
+            {0.0, 0.0, 1.0},     -- Blue
+            {0.29, 0.0, 0.51},   -- Indigo
+            {0.58, 0.0, 0.83}    -- Violet
+        }
+        
+        -- Cycle through colors every 0.3 seconds
+        local colorIndex = math.floor(love.timer.getTime() * 3.33 * 2) % 7 + 1
+        local color = rainbowColors[colorIndex]
+        
+        -- Pulsing glow effect
+        local glowAlpha = 0.2 + math.sin(love.timer.getTime() * 3) * 0.15
+        
+        -- Outer glow
+        love.graphics.setColor(color[1], color[2], color[3], glowAlpha * (isDebug and 1.5 or 1))
+        love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 4, 4)
+        
+        -- Main rainbow power-up
+        love.graphics.setColor(color[1], color[2], color[3], alpha or 1)
+        love.graphics.rectangle("fill", px + 1, py + 1, size - 2, size - 2, 4, 4)
+        
+        -- Inner highlight
+        love.graphics.setColor(color[1] * 0.8, color[2] * 0.8, color[3] * 0.8, 0.5 * (alpha or 1))
+        love.graphics.rectangle("fill", px + 3, py + 3, size - 8, size - 8, 2, 2)
+        
+        -- Blink effect when about to expire (only for regular spawn)
+        if not isDebug and self.powerUpTimer < 2 and math.floor(self.powerUp.blink * 4) % 2 == 0 then
+            love.graphics.setColor(1, 1, 1, 0.3)
+            love.graphics.rectangle("fill", px, py, size, size)
+        end
+    end
+
+    -- Helper function to draw circle-shaped power-ups
+    local function drawCirclePowerUp(px, py, size, color, glowColor, isBlackhole)
+        local centerX = px + size / 2
+        local centerY = py + size / 2
+        local radius = size / 2
+        
+        -- Outer glow
+        if isBlackhole then
+            -- Blackhole gets WHITE glow
+            love.graphics.setColor(1, 1, 1, 0.3 + math.sin(love.timer.getTime() * 2) * 0.1)
+        else
+            love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], 0.3 + math.sin(love.timer.getTime() * 2) * 0.1)
+        end
+        love.graphics.circle("fill", centerX, centerY, radius + 4)
+        
+        -- Inner glow
+        if isBlackhole then
+            love.graphics.setColor(1, 1, 1, 0.15)
+        else
+            love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], 0.15)
+        end
+        love.graphics.circle("fill", centerX, centerY, radius + 8)
+        
+        -- Main circle
+        love.graphics.setColor(color[1], color[2], color[3])
+        love.graphics.circle("fill", centerX, centerY, radius - 1)
+        
+        -- Inner highlight (for whitehole and wormhole)
+        if not isBlackhole then
+            love.graphics.setColor(color[1] * 0.8, color[2] * 0.8, color[3] * 0.8, 0.5)
+            love.graphics.circle("fill", centerX, centerY, radius - 4)
+        end
+        
+        -- Blackhole gets a subtle ring effect
+        if isBlackhole then
+            love.graphics.setColor(0.3, 0.3, 0.3, 0.5)
+            love.graphics.circle("line", centerX, centerY, radius - 2)
+            love.graphics.setColor(0.2, 0.2, 0.2, 0.3)
+            love.graphics.circle("line", centerX, centerY, radius + 2)
+        end
+    end
+
     -- Power‑up (only show if not in forbidden realm)
     if self.powerUp and not self.inForbiddenRealm then
         local px = boardX + (self.powerUp.x - 1) * self.gridSize * scale
         local py = boardY + (self.powerUp.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local color = self.colorMap[self.powerUp.type] or {1, 1, 1}
-        local alpha = 1
-        if self.powerUpTimer < 2 and math.floor(self.powerUp.blink * 4) % 2 == 0 then
-            alpha = 0.4
+        
+        if self.powerUp.type == "rainbow" then
+            drawRainbowPowerUp(px, py, size, 1, false)
+        elseif self.powerUp.type == "blackhole" then
+            local color = self.colorMap.blackhole or {0.0, 0.0, 0.0}
+            drawCirclePowerUp(px, py, size, color, {1, 1, 1}, true)
+        elseif self.powerUp.type == "whitehole" then
+            local color = self.colorMap.whitehole or {1.0, 1.0, 1.0}
+            drawCirclePowerUp(px, py, size, color, {0.8, 0.8, 0.8}, false)
+        elseif self.powerUp.type == "wormhole" then
+            local color = self.colorMap.wormhole or {0.19, 0.10, 0.20}
+            drawCirclePowerUp(px, py, size, color, {0.4, 0.2, 0.6}, false)
+        else
+            -- Regular power-up rendering
+            local color = self.colorMap[self.powerUp.type] or {1, 1, 1}
+            local alpha = 1
+            if self.powerUpTimer < 2 and math.floor(self.powerUp.blink * 4) % 2 == 0 then
+                alpha = 0.4
+            end
+            love.graphics.setColor(color[1], color[2], color[3], alpha)
+            love.graphics.rectangle("fill", px + 1, py + 1, size - 2, size - 2, 4, 4)
+            love.graphics.setColor(color[1], color[2], color[3], 0.3 * alpha)
+            love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 6, 6)
         end
-        love.graphics.setColor(color[1], color[2], color[3], alpha)
-        love.graphics.rectangle("fill", px + 1, py + 1, size - 2, size - 2, 4, 4)
-        love.graphics.setColor(color[1], color[2], color[3], 0.3 * alpha)
-        love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 6, 6)
     end
 
     -- Debug items (using color map)
@@ -1985,12 +2084,20 @@ function SnakeGame:draw(x, y, width, height)
             love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
             love.graphics.setColor(1, 1, 1, 0.15)
             love.graphics.rectangle("fill", ix - 2, iy - 2, size + 4, size + 4, 6, 6)
+        elseif item.type == "rainbow" then
+            drawRainbowPowerUp(ix, iy, size, 1, true)
+        elseif item.type == "blackhole" then
+            drawCirclePowerUp(ix, iy, size, color, {1, 1, 1}, true)
+        elseif item.type == "whitehole" then
+            drawCirclePowerUp(ix, iy, size, color, {0.8, 0.8, 0.8}, false)
+        elseif item.type == "wormhole" then
+            drawCirclePowerUp(ix, iy, size, color, {0.4, 0.2, 0.6}, false)
         else
-            -- Regular power-up
-            love.graphics.setColor(color[1], color[2], color[3], 1)
-            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
+    
             love.graphics.setColor(color[1], color[2], color[3], 0.3)
             love.graphics.rectangle("fill", ix - 2, iy - 2, size + 4, size + 4, 6, 6)
+            love.graphics.setColor(color[1], color[2], color[3], 1)
+            love.graphics.rectangle("fill", ix + 1, iy + 1, size - 2, size - 2, 4, 4)
         end
     end
 
@@ -2174,6 +2281,7 @@ function SnakeGame:draw(x, y, width, height)
 
     love.graphics.pop()
 end
+
 
 -- ============================================================
 -- INPUT HANDLING
