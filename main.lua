@@ -6,7 +6,11 @@ _G.Notifications = {
     add = function(title, msg, icon, duration) end
 }
 
+local moonshine = require("lib/moonshine")
 local SnakeGame = require("snake")
+
+effect = moonshine(moonshine.effects.scanlines).chain(moonshine.effects.crt)
+effect.scanlines.opacity = 0.6
 
 function love.load()
     -- Fixed window size, non‑resizable
@@ -20,7 +24,9 @@ function love.update(dt)
 end
 
 function love.draw()
-    game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    effect(function()
+        game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    end)
 end
 
 function love.keypressed(key)
