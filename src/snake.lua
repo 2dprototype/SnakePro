@@ -93,12 +93,6 @@ function SnakeGame.new()
     self.swipeStartY = 0
     self.minSwipeDistance = 20
     self.touchMap = {}
-    
-    -- Sweep Visual Effect State
-    self.isSwiping = false
-    self.swipeCurrentX = 0
-    self.swipeCurrentY = 0
-    self.swipeAlpha = 0
 
     -- Color map for all items
     self.colorMap = {
@@ -1273,11 +1267,6 @@ end
 -- ============================================================
 function SnakeGame:update(dt)
     if self.paused then return end
-    
-    -- Fade out sweep visual
-    if not self.isSwiping and self.swipeAlpha > 0 then
-        self.swipeAlpha = math.max(0, self.swipeAlpha - dt * 3)
-    end
 
     if self.immortalEnding then
         self:updateImmortalEnding(dt)
@@ -2182,22 +2171,7 @@ function SnakeGame:draw(x, y, width, height)
             love.graphics.printf("Mate Count: " .. self.mateCount, boardX, boardY + boardH / 2 + 78, boardW, "center")
         end
     end
-    
-    -- Draw Sweep/Swipe Trail
-    if (self.isSwiping or self.swipeAlpha > 0) and self.swipeStartX then
-        love.graphics.setColor(1.0, 1.0, 1.0, self.swipeAlpha) -- Changed from (0.35, 0.85, 1.0) to white
-        love.graphics.setLineWidth(4)
-        
-        -- Draw the trailing line
-        love.graphics.line(self.swipeStartX, self.swipeStartY, self.swipeCurrentX, self.swipeCurrentY)
-        
-        -- Draw end caps for a polished look
-        love.graphics.circle("fill", self.swipeStartX, self.swipeStartY, 4)
-        love.graphics.circle("fill", self.swipeCurrentX, self.swipeCurrentY, 6)
-        
-        love.graphics.setLineWidth(1) -- reset
-    end
-    
+
     love.graphics.pop()
 end
 
@@ -2283,25 +2257,14 @@ function SnakeGame:handleSwipe(dx, dy)
     end
 end
 
--- Mouse sweep tracking
+-- Mouse slide support
 function SnakeGame:mousepressed(x, y, button)
     if button == 1 then
         self.swipeStartX = x
         self.swipeStartY = y
-        self.swipeCurrentX = x
-        self.swipeCurrentY = y
-        self.isSwiping = true
-        self.swipeAlpha = 0.6
         return true
     end
     return false
-end
-
-function SnakeGame:mousemoved(x, y, dx, dy)
-    if self.isSwiping then
-        self.swipeCurrentX = x
-        self.swipeCurrentY = y
-    end
 end
 
 function SnakeGame:mousereleased(x, y, button)
@@ -2309,49 +2272,29 @@ function SnakeGame:mousereleased(x, y, button)
         local dx = x - self.swipeStartX
         local dy = y - self.swipeStartY
         self:handleSwipe(dx, dy)
-        self.isSwiping = false
         return true
     end
     return false
 end
 
--- Touch sweep tracking
+-- Mobile touch support
 function SnakeGame:touchpressed(id, x, y)
     self.touchMap = self.touchMap or {}
-    self.touchMap[id] = { startX = x, startY = y, currX = x, currY = y }
-    
-    -- Use the primary touch for the visual sweep
-    self.swipeStartX = x
-    self.swipeStartY = y
-    self.swipeCurrentX = x
-    self.swipeCurrentY = y
-    self.isSwiping = true
-    self.swipeAlpha = 0.6
+    self.touchMap[id] = { x = x, y = y }
     return true
-end
-
-function SnakeGame:touchmoved(id, x, y)
-    if self.touchMap and self.touchMap[id] then
-        self.touchMap[id].currX = x
-        self.touchMap[id].currY = y
-        self.swipeCurrentX = x
-        self.swipeCurrentY = y
-    end
 end
 
 function SnakeGame:touchreleased(id, x, y)
     if self.touchMap and self.touchMap[id] then
         local startPos = self.touchMap[id]
-        local dx = x - startPos.startX
-        local dy = y - startPos.startY
+        local dx = x - startPos.x
+        local dy = y - startPos.y
         self:handleSwipe(dx, dy)
         self.touchMap[id] = nil
-        self.isSwiping = false
         return true
     end
     return false
 end
-
 
 function SnakeGame:spawnDebugItems()
     self.debugItems = {}

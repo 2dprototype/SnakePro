@@ -3,5 +3,5 @@ function love.conf(t)
     t.window.height = 440
     t.window.resizable = false
     t.window.title = "Snake Pro"
-    t.console = true
+    -- t.console = true
 end
