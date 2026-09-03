@@ -135,7 +135,8 @@ function SnakeGame.new()
         wormhole = {0.19, 0.10, 0.20},
         whitehole = {1.0, 1.0, 1.0},
         blackhole = {0.0, 0.0, 0.0},
-        fourthwall = {0.0, 0.8, 0.8}
+        fourthwall = {0.0, 0.8, 0.8},
+        fifthwall = {0.0, 1.0, 0},
     }
 
     -- Invincibility after respawn
@@ -260,7 +261,8 @@ function SnakeGame.new()
         "wormhole", 
         "whitehole", 
         "blackhole", 
-        "fourthwall"
+        "fourthwall",
+        "fifthwall"
     }
     self.powerUp = nil
     self.powerUpTimer = 0
@@ -298,6 +300,11 @@ function SnakeGame.new()
     self.gameOverMessage = nil
     self.immortalFlash = 0
     self.immortalShake = 0
+    
+    self.fifthWallActive = false
+    self.fifthWallTimer = 0
+    self.fifthWallDuration = 15.0
+    self.externalWindows = {} -- Tracks the SDL windows for outside segments
 
     self:reset()
     return self
@@ -412,6 +419,78 @@ function SnakeGame:reset()
     self.snakeColors.body = {0.35, 0.85, 0.2}
     self:spawnFood()
     self:loadHighScore()
+    self:destroyExternalWindows()
+end
+
+
+function SnakeGame:destroyExternalWindows()
+    for _, winData in pairs(self.externalWindows) do
+        sdl.SDL_DestroyWindow(winData.window)
+    end
+    self.externalWindows = {}
+end
+
+function SnakeGame:updateExternalWindows(scale, boardX, boardY)
+    if not self.fifthWallActive then
+        if next(self.externalWindows) then self:destroyExternalWindows() end
+        return
+    end
+
+    local mainWinX, mainWinY = love.window.getPosition()
+    local size = self.gridSize * scale
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+    -- Track which segments are currently outside to prune the rest
+    local currentOutside = {}
+
+    for i, seg in ipairs(self.snake) do
+        local isOutside = (seg.x < 1 or seg.x > cols or seg.y < 1 or seg.y > rows)
+        
+        if isOutside then
+            local segKey = tostring(seg.x) .. "_" .. tostring(seg.y)
+            currentOutside[segKey] = true
+            
+            -- Calculate absolute desktop position
+            local absX = mainWinX + boardX + (seg.x - 1) * size
+            local absY = mainWinY + boardY + (seg.y - 1) * size
+
+            if not self.externalWindows[segKey] then
+                -- Create borderless, always-on-top window
+                local flags = bit.bor(0x00000010, 0x00008000) 
+                local win = sdl.SDL_CreateWindow("SnakeSegment", absX, absY, size, size, flags)
+                
+                -- Convert snake color {r,g,b} (0-1) to ARGB uint32
+                local color = i == 1 and self.snakeColors.head or self.snakeColors.body
+                local r = math.floor(color[1] * 255)
+                local g = math.floor(color[2] * 255)
+                local b = math.floor(color[3] * 255)
+                local uintColor = bit.lshift(255, 24) + bit.lshift(r, 16) + bit.lshift(g, 8) + b
+                
+                local surface = sdl.SDL_GetWindowSurface(win)
+                sdl.SDL_FillRect(surface, nil, uintColor)
+                sdl.SDL_UpdateWindowSurface(win)
+                
+                self.externalWindows[segKey] = { window = win, x = absX, y = absY }
+            else
+                -- Move existing window if it shifted
+                local winData = self.externalWindows[segKey]
+                if winData.x ~= absX or winData.y ~= absY then
+                    sdl.SDL_SetWindowPosition(winData.window, absX, absY)
+                    winData.x = absX
+                    winData.y = absY
+                end
+            end
+        end
+    end
+
+    -- Cleanup windows for segments that moved back inside the grid
+    for key, winData in pairs(self.externalWindows) do
+        if not currentOutside[key] then
+            sdl.SDL_DestroyWindow(winData.window)
+            self.externalWindows[key] = nil
+        end
+    end
 end
 
 -- ============================================================
@@ -1213,6 +1292,12 @@ function SnakeGame:applyPowerUp(powerUp)
         self.outsideTimer = 0
         AudioManager.playSFX("levelup", 1.0, 0.7)
         Notifications.add("Snake", "4TH WALL BREAK! You can leave the grid!", nil, 2.0)
+    elseif type == "fifthwall" then
+        self.fifthWallActive = true
+        self.fifthWallTimer = self.fifthWallDuration
+        self.outsideTimer = 0
+        AudioManager.playSFX("levelup", 1.0, 0.7)
+        Notifications.add("Snake", "5TH WALL BREAK! The snake escapes the window!", nil, 2.0)
     end
 end
 
@@ -1354,6 +1439,15 @@ function SnakeGame:update(dt)
         self.rainbowTimer = self.rainbowTimer - dt
         if self.rainbowTimer <= 0 then self.rainbowActive = false end
     end
+        
+    if self.fifthWallActive then
+        self.fifthWallTimer = self.fifthWallTimer - dt
+        if self.fifthWallTimer <= 0 then
+            self.fifthWallActive = false
+            self.outsideTimer = 0
+        end
+    end
+    
     if self.fourthWallActive then
         self.fourthWallTimer = self.fourthWallTimer - dt
         if self.fourthWallTimer <= 0 then
@@ -1610,7 +1704,7 @@ function SnakeGame:update(dt)
         local newHead = { x = head.x + self.dir.x, y = head.y + self.dir.y }
 
         local outside = false
-        if not self.fourthWallActive then
+        if not (self.fourthWallActive or self.fifthWallActive) then
             if newHead.x < 1 then newHead.x = cols end
             if newHead.x > cols then newHead.x = 1 end
             if newHead.y < 1 then newHead.y = rows end
@@ -1653,7 +1747,7 @@ function SnakeGame:update(dt)
             end
         end
 
-        if self.fourthWallActive and outside then
+        if self.fourthWallActive and not self.fifthWallActive and outside then
             self.outsideTimer = self.outsideTimer + dt
             if self.outsideTimer >= self.outsideMax then
                 self.gameOver = true
@@ -1664,7 +1758,8 @@ function SnakeGame:update(dt)
                 end
                 AudioManager.playSFX("glitch", 1.2, 0.4)
                 return
-            end        end
+            end
+        end
 
         table.insert(self.snake, 1, newHead)
 
@@ -2358,7 +2453,9 @@ function SnakeGame:draw(x, y, width, height)
             love.graphics.printf("Mate Count: " .. self.mateCount, boardX, boardY + boardH / 2 + 78, boardW, "center")
         end
     end
-
+    
+    self:updateExternalWindows(scale, boardX, boardY)
+    
     love.graphics.pop()
 end
 

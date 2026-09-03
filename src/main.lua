@@ -1,3 +1,30 @@
+local ffi = require("ffi")
+
+ffi.cdef[[
+    typedef void SDL_Window;
+    typedef void SDL_Surface;
+    typedef struct { int x, y, w, h; } SDL_Rect;
+
+    enum {
+        SDL_WINDOW_BORDERLESS    = 0x00000010,
+        SDL_WINDOW_ALWAYS_ON_TOP = 0x00008000
+    };
+
+    SDL_Window* SDL_CreateWindow(const char* title, int x, int y, int w, int h, uint32_t flags);
+    int SDL_SetWindowOpacity(SDL_Window* window, float opacity);
+    void SDL_SetWindowPosition(SDL_Window* window, int x, int y);
+    SDL_Surface* SDL_GetWindowSurface(SDL_Window* window);
+    int SDL_UpdateWindowSurface(SDL_Window* window);
+    int SDL_FillRect(SDL_Surface* dst, const SDL_Rect* rect, uint32_t color);
+    void SDL_DestroyWindow(SDL_Window* window);
+]]
+
+if love.system.getOS() == "Windows" then
+    sdl = ffi.load("SDL2")
+else
+    sdl = ffi.C
+end
+
 package.loaded["src/core/audio_manager"] = {
     playSFX = function(name, pitch, volume) end
 }
