@@ -1522,46 +1522,73 @@ function SnakeGame:update(dt)
         end
     end
 
-    -- Whitehole logic (attracts items to player head)
+    -- Whitehole logic (repels items away from player head)
     if self.whiteholeActive then
         self.whiteholeTimer = self.whiteholeTimer - dt
         if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
-        if self.food and not self.inForbiddenRealm then
-            local head = self.snake[1]
-            local dx = self.food.x - head.x
-            local dy = self.food.y - head.y
-            local newX, newY = self.food.x, self.food.y
-            if math.abs(dx) >= math.abs(dy) then
-                newX = self.food.x + (dx > 0 and 1 or -1)
-            else
-                newY = self.food.y + (dy > 0 and 1 or -1)
-            end
-            newX = math.max(1, math.min(self.cols, newX))
-            newY = math.max(1, math.min(self.rows, newY))
-            if self:isEmptyCell(newX, newY, self.food) then
-                self.food.x = newX
-                self.food.y = newY
+        
+        local head = self.snake[1]
+        local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+        local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+        
+        local function repelItem(item)
+            if item then
+                local dx = item.x - head.x
+                local dy = item.y - head.y
+                local dist = math.abs(dx) + math.abs(dy)
+                
+                -- Only repel if not already adjacent (to avoid jitter)
+                if dist > 1 then
+                    local newX, newY = item.x, item.y
+                    if math.abs(dx) >= math.abs(dy) then
+                        newX = item.x + (dx > 0 and 1 or -1)
+                    else
+                        newY = item.y + (dy > 0 and 1 or -1)
+                    end
+                    newX = math.max(1, math.min(cols, newX))
+                    newY = math.max(1, math.min(rows, newY))
+                    if self:isEmptyCell(newX, newY, item) then
+                        item.x = newX
+                        item.y = newY
+                    end
+                end
             end
         end
+        
+        -- Repel ALL items
+        repelItem(self.food)
+        repelItem(self.powerUp)
+        repelItem(self.greenFruit)
+        repelItem(self.goldenFruit)
+        
+        -- Repel forbidden foods
         if self.inForbiddenRealm then
-            local head = self.snake[1]
             for _, f in ipairs(self.forbiddenFoods) do
-                local dx = f.x - head.x
-                local dy = f.y - head.y
-                local newX, newY = f.x, f.y
-                if math.abs(dx) >= math.abs(dy) then
-                    newX = f.x + (dx > 0 and 1 or -1)
-                else
-                    newY = f.y + (dy > 0 and 1 or -1)
-                end
-                newX = math.max(1, math.min(self.forbiddenCols, newX))
-                newY = math.max(1, math.min(self.forbiddenRows, newY))
-                if self:isEmptyCell(newX, newY, f) then
-                    f.x = newX
-                    f.y = newY
-                end
+                repelItem(f)
             end
         end
+        
+        -- Repel female snake (if active and not in forbidden)
+        -- if self.femaleActive and not self.femaleInForbidden then
+            -- local fHead = self.femaleSnake[1]
+            -- local dx = fHead.x - head.x
+            -- local dy = fHead.y - head.y
+            -- local dist = math.abs(dx) + math.abs(dy)
+            -- if dist > 1 then
+                -- local newX, newY = fHead.x, fHead.y
+                -- if math.abs(dx) >= math.abs(dy) then
+                    -- newX = fHead.x + (dx > 0 and 1 or -1)
+                -- else
+                    -- newY = fHead.y + (dy > 0 and 1 or -1)
+                -- end
+                -- newX = math.max(1, math.min(self.cols, newX))
+                -- newY = math.max(1, math.min(self.rows, newY))
+                -- if self:isEmptyCell(newX, newY, fHead) then
+                    -- fHead.x = newX
+                    -- fHead.y = newY
+                -- end
+            -- end
+        -- end
     end
 
     -- Blackhole logic (repels items away from player head)
@@ -1614,23 +1641,23 @@ function SnakeGame:update(dt)
                 end
             end
         end
-        if self.femaleActive and not self.femaleInForbidden then
-            local fHead = self.femaleSnake[1]
-            local dx = head.x - fHead.x
-            local dy = head.y - fHead.y
-            local newX, newY = fHead.x, fHead.y
-            if math.abs(dx) >= math.abs(dy) then
-                newX = fHead.x + (dx > 0 and 1 or -1)
-            else
-                newY = fHead.y + (dy > 0 and 1 or -1)
-            end
-            newX = math.max(1, math.min(self.cols, newX))
-            newY = math.max(1, math.min(self.rows, newY))
-            if self:isEmptyCell(newX, newY, fHead) then
-                fHead.x = newX
-                fHead.y = newY
-            end
-        end
+        -- if self.femaleActive and not self.femaleInForbidden then
+            -- local fHead = self.femaleSnake[1]
+            -- local dx = head.x - fHead.x
+            -- local dy = head.y - fHead.y
+            -- local newX, newY = fHead.x, fHead.y
+            -- if math.abs(dx) >= math.abs(dy) then
+                -- newX = fHead.x + (dx > 0 and 1 or -1)
+            -- else
+                -- newY = fHead.y + (dy > 0 and 1 or -1)
+            -- end
+            -- newX = math.max(1, math.min(self.cols, newX))
+            -- newY = math.max(1, math.min(self.rows, newY))
+            -- if self:isEmptyCell(newX, newY, fHead) then
+                -- fHead.x = newX
+                -- fHead.y = newY
+            -- end
+        -- end
     end
 
     -- Handle blinking for invincibility and no collision (both snakes)
@@ -2077,6 +2104,9 @@ function SnakeGame:draw(x, y, width, height)
     end
     if self.fourthWallActive then
         statuses[#statuses+1] = {text = "4W", color = {0.0, 0.8, 0.8}}
+    end    
+    if self.fifthWallActive then
+        statuses[#statuses+1] = {text = "5W", color = {0.0, 1, 0.0}}
     end
     if self.devilPermanent then
         statuses[#statuses+1] = {text = "DEVIL", color = {0.9, 0.1, 0.1}}
