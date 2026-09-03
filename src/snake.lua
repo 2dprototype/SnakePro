@@ -441,7 +441,8 @@ function SnakeGame:updateExternalWindows(scale, boardX, boardY)
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
 
-    -- Track which segments are currently outside to prune the rest
+    -- Require ffi to define precise SDL_Rect boundaries
+    local ffi = require("ffi")
     local currentOutside = {}
 
     for i, seg in ipairs(self.snake) do
@@ -459,18 +460,6 @@ function SnakeGame:updateExternalWindows(scale, boardX, boardY)
                 -- Create borderless, always-on-top window
                 local flags = bit.bor(0x00000010, 0x00008000) 
                 local win = sdl.SDL_CreateWindow("SnakeSegment", absX, absY, size, size, flags)
-                
-                -- Convert snake color {r,g,b} (0-1) to ARGB uint32
-                local color = i == 1 and self.snakeColors.head or self.snakeColors.body
-                local r = math.floor(color[1] * 255)
-                local g = math.floor(color[2] * 255)
-                local b = math.floor(color[3] * 255)
-                local uintColor = bit.lshift(255, 24) + bit.lshift(r, 16) + bit.lshift(g, 8) + b
-                
-                local surface = sdl.SDL_GetWindowSurface(win)
-                sdl.SDL_FillRect(surface, nil, uintColor)
-                sdl.SDL_UpdateWindowSurface(win)
-                
                 self.externalWindows[segKey] = { window = win, x = absX, y = absY }
             else
                 -- Move existing window if it shifted
@@ -481,6 +470,83 @@ function SnakeGame:updateExternalWindows(scale, boardX, boardY)
                     winData.y = absY
                 end
             end
+
+            -- ==========================================
+            -- EXACT VISUAL ATTRIBUTE REPLICATION
+            -- ==========================================
+            local winData = self.externalWindows[segKey]
+            local surface = sdl.SDL_GetWindowSurface(winData.window)
+            
+            -- 1. Blinking (Invincibility / No Collision)
+            local shouldSkip = false
+            if (self.invincible or self.noCollision) and not self.blinkVisible then
+                shouldSkip = true
+            end
+
+            if shouldSkip then
+                -- Clear surface to simulate flashing out of existence
+                sdl.SDL_FillRect(surface, nil, 0x00000000)
+            else
+                -- 2. Determine base colors dynamically
+                local drawColor = {self.snakeColors.head[1], self.snakeColors.head[2], self.snakeColors.head[3]}
+                
+                -- Immortal Ending Transition
+                if self.immortalEnding then
+                    local t = self.immortalProgress
+                    local gold = {0.9, 0.75, 0.2}
+                    for c = 1, 3 do drawColor[c] = drawColor[c] + (gold[c] - drawColor[c]) * t end
+                end
+
+                if self.rainbowActive then
+                    local hue = (i - 1) / #self.snake
+                    local r, g, b = hsvToRgb(hue, 1.0, 1.0)
+                    drawColor = {r, g, b}
+                else
+                    if i == 1 then
+                        if self.devilPermanent then drawColor = self.devilColor end
+                    else
+                        if self.immortalEnding then
+                            local t = self.immortalProgress
+                            local bodyGold = {0.7, 0.55, 0.15}
+                            local bodyColor = {self.snakeColors.body[1], self.snakeColors.body[2], self.snakeColors.body[3]}
+                            for c = 1, 3 do bodyColor[c] = bodyColor[c] + (bodyGold[c] - bodyColor[c]) * t end
+                            drawColor = bodyColor
+                        else
+                            drawColor = self.devilPermanent and self.devilColor or self.snakeColors.body
+                        end
+                    end
+                end
+
+                -- Color conversion helper
+                local function getUint(colorArr)
+                    local r = math.floor(colorArr[1] * 255)
+                    local g = math.floor(colorArr[2] * 255)
+                    local b = math.floor(colorArr[3] * 255)
+                    return bit.lshift(255, 24) + bit.lshift(r, 16) + bit.lshift(g, 8) + b
+                end
+
+                -- Base Window Clear (Dark Background)
+                local bgCol = self.inForbiddenRealm and 0xFF080010 or 0xFF030303
+                sdl.SDL_FillRect(surface, nil, bgCol)
+
+                -- 3. Glow Effect Bounds
+                if self.glowActive then
+                    -- Fills full window bounds mimicking the outer glow size
+                    sdl.SDL_FillRect(surface, nil, 0xFF80FF4C) 
+                end
+
+                -- 4. Main Body Rectangle (Simulating: sx + 1, sy + 1, size - 2, size - 2)
+                local mainRect = ffi.new("SDL_Rect", {x = 1, y = 1, w = size - 2, h = size - 2})
+                sdl.SDL_FillRect(surface, mainRect, getUint(drawColor))
+
+                -- 5. Inner Highlight (Simulating: sx + 3, sy + 3, size - 8, size - 8)
+                -- Simulates alpha blending by manually brightening the inner block color slightly
+                local hlColor = { math.min(1, drawColor[1] + 0.2), math.min(1, drawColor[2] + 0.2), math.min(1, drawColor[3] + 0.2) }
+                local highlightRect = ffi.new("SDL_Rect", {x = 3, y = 3, w = math.max(1, size - 8), h = math.max(1, size - 8)})
+                sdl.SDL_FillRect(surface, highlightRect, getUint(hlColor))
+            end
+
+            sdl.SDL_UpdateWindowSurface(winData.window)
         end
     end
 
