@@ -147,6 +147,20 @@ Codex.items = {
         points = "Downward Pull (5s)",
         desc = "Generates intense planetary downward gravity, steadily pulling all fruits, items, and crates toward the bottom of the grid."
     },
+    {
+        key = "antigravity",
+        name = "Antigravity Fruit",
+        category = "Cosmic Power",
+        points = "Upward Pull (5s)",
+        desc = "Reverses gravitational polarity, pulling all fruits, items, and crates towards the ceiling of the grid."
+    },
+    {
+        key = "physicsfruit",
+        name = "Physics Fruit",
+        category = "Cosmic Power",
+        points = "Zero-G Physics (8s)",
+        desc = "Un-snaps all objects from grid cells into zero-gravity physical bodies that float, bounce, collide with boxes, and respond to cosmic forces."
+    },
 
     -- Social & Companion
     {
@@ -548,6 +562,37 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.line(cx - 3, cy - 1, cx, cy + 3)
         love.graphics.line(cx + 3, cy - 1, cx, cy + 3)
         love.graphics.line(cx, cy - 4, cx, cy + 3)
+
+    elseif key == "antigravity" then
+        -- Antigravity Fruit (Upward Pull)
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local rad = size / 2
+        local col = Config.colors.antigravity or {0.2, 0.9, 0.85}
+        love.graphics.setColor(col[1], col[2], col[3], 0.35 + math.sin(time * 3) * 0.1)
+        love.graphics.circle("fill", cx, cy, rad + 3)
+        love.graphics.setColor(col[1], col[2], col[3])
+        love.graphics.circle("fill", cx, cy, rad - 1)
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.9)
+        love.graphics.line(cx - 3, cy + 1, cx, cy - 3)
+        love.graphics.line(cx + 3, cy + 1, cx, cy - 3)
+        love.graphics.line(cx, cy + 4, cx, cy - 3)
+
+    elseif key == "physicsfruit" then
+        -- Physics Fruit (Zero-G Floating Atom / Cube)
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local col = Config.colors.physicsfruit or {0.95, 0.8, 0.1}
+        love.graphics.setColor(col[1], col[2], col[3], 0.35 + math.sin(time * 4) * 0.15)
+        love.graphics.circle("fill", cx, cy, size / 2 + 2)
+        love.graphics.setColor(col[1], col[2], col[3])
+        love.graphics.push()
+        love.graphics.translate(cx, cy)
+        love.graphics.rotate(time * 1.5)
+        love.graphics.rectangle("line", -size * 0.3, -size * 0.3, size * 0.6, size * 0.6, 2, 2)
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.9)
+        love.graphics.circle("fill", 0, 0, 2)
+        love.graphics.pop()
 
     elseif key == "forbidden" then
         -- Cosmic Purple Sigil

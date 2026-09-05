@@ -33,7 +33,9 @@ local DEBUG_SERIAL_MAP = {
     [23] = {name = "Thunder Surge", type = "powerup", key = "speedfood", powerup = "speedfood"},
     [24] = {name = "Chronostasis (Stop)", type = "powerup", key = "stopfood", powerup = "stopfood"},
     [25] = {name = "Wooden Crate", type = "box", key = "box"},
-    [26] = {name = "Gravity Fruit", type = "powerup", key = "gravityfruit", powerup = "gravityfruit"}
+    [26] = {name = "Gravity Fruit", type = "powerup", key = "gravityfruit", powerup = "gravityfruit"},
+    [27] = {name = "Antigravity Fruit", type = "powerup", key = "antigravity", powerup = "antigravity"},
+    [28] = {name = "Physics Fruit", type = "powerup", key = "physicsfruit", powerup = "physicsfruit"}
 }
 
 local SnakeGame = {}
@@ -109,6 +111,13 @@ function SnakeGame.new()
     self.gravityActive = false
     self.gravityTimer = 0
     self.gravityStepTimer = 0
+
+    self.antigravityActive = false
+    self.antigravityTimer = 0
+    self.antigravityStepTimer = 0
+
+    self.physicsActive = false
+    self.physicsTimer = 0
 
     self.noCollision = false
     self.noCollisionTimer = 0
@@ -251,6 +260,11 @@ function SnakeGame:reset()
     self.gravityActive = false
     self.gravityTimer = 0
     self.gravityStepTimer = 0
+    self.antigravityActive = false
+    self.antigravityTimer = 0
+    self.antigravityStepTimer = 0
+    self.physicsActive = false
+    self.physicsTimer = 0
     self.noCollision = false
     self.noCollisionTimer = 0
     self.lustActive = false
@@ -427,7 +441,11 @@ function SnakeGame:spawnBox()
     local free = self:getFreeCells()
     if #free > 0 then
         local pos = free[math.random(1, #free)]
-        table.insert(self.boxes, {x = pos.x, y = pos.y})
+        local b = {x = pos.x, y = pos.y}
+        if self.physicsActive then
+            self:initPhysicsItem(b, true)
+        end
+        table.insert(self.boxes, b)
         return true
     end
     return false
@@ -461,6 +479,9 @@ function SnakeGame:spawnFood()
     else
         self.food = {x = 1, y = 1}
     end
+    if self.physicsActive then
+        self:initPhysicsItem(self.food, false)
+    end
 end
 
 function SnakeGame:spawnPowerUp()
@@ -482,6 +503,9 @@ function SnakeGame:spawnPowerUp()
             blink = 0
         }
         self.powerUpTimer = Config.powerUpDuration
+        if self.physicsActive then
+            self:initPhysicsItem(self.powerUp, false)
+        end
     end
 end
 
@@ -495,6 +519,9 @@ function SnakeGame:spawnGreenFruit()
             timer = self.greenFruitDuration
         }
         self.greenFruitTimer = self.greenFruitDuration
+        if self.physicsActive then
+            self:initPhysicsItem(self.greenFruit, false)
+        end
     end
 end
 
@@ -508,6 +535,9 @@ function SnakeGame:spawnGoldenFruit()
             timer = self.goldenFruitDuration
         }
         self.goldenFruitTimer = self.goldenFruitDuration
+        if self.physicsActive then
+            self:initPhysicsItem(self.goldenFruit, false)
+        end
     end
 end
 
@@ -518,14 +548,18 @@ function SnakeGame:spawnForbiddenFood()
         -- 70% Cosmic Shard (+30 pts), 30% Chrono Shard (+2.5s)
         local ftype = (math.random() < 0.7) and 1 or 2
         local dur = self.forbiddenFoodDuration or Config.forbiddenFoodDuration or 5.0
-        table.insert(self.forbiddenFoods, {
+        local f = {
             x = pos.x,
             y = pos.y,
             type = ftype,
             timer = dur,
             maxTimer = dur,
             blink = 0
-        })
+        }
+        if self.physicsActive then
+            self:initPhysicsItem(f, false)
+        end
+        table.insert(self.forbiddenFoods, f)
     end
 end
 
@@ -688,6 +722,455 @@ function SnakeGame:activateFifthWall()
 
     Utils.playSFX("levelup", 1.0, 0.7)
     Utils.notify("Snake", "5TH WALL BREAKOUT! Slither outside to discover desktop items!", nil, 3.0)
+end
+
+-- ============================================================
+-- ZERO-G PHYSICS MODE (Un-snap to Box2D-style physical bodies)
+-- ============================================================
+function SnakeGame:initPhysicsItem(item, isBox)
+    if not item then return end
+    item.px = item.px or item.x
+    item.py = item.py or item.y
+    item.vx = item.vx or ((math.random() - 0.5) * 4.0)
+    item.vy = item.vy or ((math.random() - 0.5) * 4.0)
+    item.rot = item.rot or 0
+    item.rotVel = item.rotVel or ((math.random() - 0.5) * 6.0)
+    item.mass = isBox and 2.5 or 1.0
+    item.radius = isBox and 0.48 or 0.42
+    item.isBox = (isBox == true)
+end
+
+function SnakeGame:activatePhysicsMode()
+    self.physicsActive = true
+    self.physicsTimer = Config.physicsFruitDuration or 8.0
+
+    if self.food then self:initPhysicsItem(self.food, false) end
+    if self.powerUp then self:initPhysicsItem(self.powerUp, false) end
+    if self.greenFruit then self:initPhysicsItem(self.greenFruit, false) end
+    if self.goldenFruit then self:initPhysicsItem(self.goldenFruit, false) end
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do self:initPhysicsItem(b, true) end
+    end
+    if self.inForbiddenRealm and self.forbiddenFoods then
+        for _, f in ipairs(self.forbiddenFoods) do self:initPhysicsItem(f, false) end
+    end
+    if self.fifthWallActive and self.outsideFoods then
+        for _, of in ipairs(self.outsideFoods) do self:initPhysicsItem(of, false) end
+    end
+end
+
+function SnakeGame:deactivatePhysicsMode()
+    self.physicsActive = false
+    self.physicsTimer = 0
+
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+    local occupied = {}
+    local function mark(x, y) occupied[x .. "," .. y] = true end
+    local function isOcc(x, y) return occupied[x .. "," .. y] == true end
+
+    -- Mark snake body and female snake body
+    if self.snake then
+        for _, seg in ipairs(self.snake) do mark(seg.x, seg.y) end
+    end
+    if self.female and self.female.body then
+        for _, seg in ipairs(self.female.body) do mark(seg.x, seg.y) end
+    end
+
+    local function snapItem(item, maxCols, maxRows)
+        if not item then return end
+        local startX = math.max(1, math.min(maxCols, math.floor((item.px or item.x) + 0.5)))
+        local startY = math.max(1, math.min(maxRows, math.floor((item.py or item.y) + 0.5)))
+
+        if not isOcc(startX, startY) then
+            item.x = startX
+            item.y = startY
+            mark(startX, startY)
+        else
+            local found = false
+            for r = 1, math.max(maxCols, maxRows) do
+                for dy = -r, r do
+                    for dx = -r, r do
+                        local cx = startX + dx
+                        local cy = startY + dy
+                        if cx >= 1 and cx <= maxCols and cy >= 1 and cy <= maxRows then
+                            if not isOcc(cx, cy) then
+                                item.x = cx
+                                item.y = cy
+                                mark(cx, cy)
+                                found = true
+                                break
+                            end
+                        end
+                    end
+                    if found then break end
+                end
+                if found then break end
+            end
+            if not found then
+                item.x = startX
+                item.y = startY
+            end
+        end
+
+        item.px = nil
+        item.py = nil
+        item.vx = nil
+        item.vy = nil
+        item.rot = nil
+        item.rotVel = nil
+        item.mass = nil
+        item.radius = nil
+        item.isBox = nil
+    end
+
+    if self.food then snapItem(self.food, cols, rows) end
+    if self.powerUp then snapItem(self.powerUp, cols, rows) end
+    if self.greenFruit then snapItem(self.greenFruit, cols, rows) end
+    if self.goldenFruit then snapItem(self.goldenFruit, cols, rows) end
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do
+            snapItem(b, cols, rows)
+        end
+    end
+    if self.inForbiddenRealm and self.forbiddenFoods then
+        for _, f in ipairs(self.forbiddenFoods) do snapItem(f, cols, rows) end
+    end
+    if self.fifthWallActive and self.outsideFoods then
+        for _, of in ipairs(self.outsideFoods) do
+            of.x = math.floor((of.px or of.x) + 0.5)
+            of.y = math.floor((of.py or of.y) + 0.5)
+            of.px, of.py, of.vx, of.vy, of.rot, of.rotVel, of.mass, of.radius, of.isBox = nil, nil, nil, nil, nil, nil, nil, nil, nil
+        end
+    end
+
+    Utils.playSFX("tick", 1.2, 0.6)
+    Utils.notify("Physics Collapsed", "Objects snapped back to nearest grid cells!", nil, 2.0)
+end
+
+function SnakeGame:eatItem(item, isPlayer)
+    if not item then return end
+    local scoreMult = (self.lustActive and self.lustMultiplier or 1)
+
+    if item == self.food then
+        self:checkDiscovery("food")
+        local pts = 10 * scoreMult
+        self:addScore(pts)
+        self:updateBaseSpeed()
+        Utils.playSFX("tick", 1.5, 0.5)
+        self:spawnFood()
+        if isPlayer and self.snake and #self.snake > 0 then
+            local tail = self.snake[#self.snake]
+            table.insert(self.snake, {x = tail.x, y = tail.y})
+        elseif not isPlayer and self.female and self.female.body and #self.female.body > 0 then
+            local tail = self.female.body[#self.female.body]
+            table.insert(self.female.body, {x = tail.x, y = tail.y})
+        end
+    elseif item == self.greenFruit then
+        self:checkDiscovery("greenfruit")
+        local pts = 200 * scoreMult
+        self:addScore(pts)
+        if isPlayer then
+            self.glowActive = true
+            self.glowTimer = self.glowDuration
+            self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.6
+            self.tempSpeedTimer = 5.0
+            Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+        else
+            self.female.glow = true
+            self.female.glowTimer = Config.glowDuration
+            self.female.speedMultiplier = self.female.speedMultiplier + 0.6
+            self.female.tempSpeedTimer = Config.glowDuration
+            Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+        end
+        Utils.playSFX("levelup", 1.8, 0.8)
+        self.greenFruit = nil
+        self.greenFruitTimer = 0
+    elseif item == self.powerUp then
+        local p = self.powerUp
+        self.powerUp = nil
+        if isPlayer then
+            self:applyPowerUp(p)
+        else
+            self.female:applyPowerUp(p, self)
+        end
+    elseif item == self.goldenFruit then
+        local g = self.goldenFruit
+        self.goldenFruit = nil
+        self.goldenFruitTimer = 0
+        if isPlayer then
+            self:applyGoldenFruit(g)
+        else
+            self.female:applyGoldenFruit(g, self)
+        end
+    elseif self.outsideFoods then
+        for fi, of in ipairs(self.outsideFoods) do
+            if of == item then
+                self:checkDiscovery("food")
+                local pts = 25 * scoreMult
+                self:addScore(pts)
+                self:updateBaseSpeed()
+                Utils.playSFX("tick", 1.6, 0.6)
+                Utils.notify("Desktop Harvest!", "Outside Apple Eaten! +" .. pts .. " pts", nil, 1.8)
+                table.remove(self.outsideFoods, fi)
+                self:spawnOutsideFood()
+                break
+            end
+        end
+    elseif self.inForbiddenRealm and self.forbiddenFoods then
+        for fi, f in ipairs(self.forbiddenFoods) do
+            if f == item then
+                self:checkDiscovery("forbidden_food_" .. f.type)
+                if f.type == 2 then
+                    self.forbiddenTimer = math.min(self.forbiddenTimer + 2.5, 15.0)
+                    if self.female and self.female.active then
+                        self.female.forbiddenTimer = self.forbiddenTimer
+                    end
+                    Utils.playSFX("levelup", 1.2, 0.6)
+                    Utils.notify("Snake", "+2.5s Chrono Shard Harvested!", nil, 1.5)
+                else
+                    local pts = 30 * scoreMult
+                    self:addScore(pts)
+                    Utils.playSFX("tick", 1.6, 0.5)
+                end
+                table.remove(self.forbiddenFoods, fi)
+                break
+            end
+        end
+    end
+end
+
+function SnakeGame:updatePhysicsSimulation(dt)
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+    local items = {}
+    local function addItem(item, isBox)
+        if not item then return end
+        if not item.px then
+            self:initPhysicsItem(item, isBox)
+        end
+        table.insert(items, item)
+    end
+
+    if self.food then addItem(self.food, false) end
+    if self.powerUp then addItem(self.powerUp, false) end
+    if self.greenFruit then addItem(self.greenFruit, false) end
+    if self.goldenFruit then addItem(self.goldenFruit, false) end
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do addItem(b, true) end
+    end
+    if self.inForbiddenRealm and self.forbiddenFoods then
+        for _, f in ipairs(self.forbiddenFoods) do addItem(f, false) end
+    end
+    if self.fifthWallActive and self.outsideFoods then
+        for _, of in ipairs(self.outsideFoods) do addItem(of, false) end
+    end
+
+    local pHead = self.snake and self.snake[1]
+    local fHead = (self.female and self.female.active and self.female.body) and self.female.body[1]
+
+    -- 1. Apply Active Gravitational & Cosmic Forces Continuously
+    for _, it in ipairs(items) do
+        if self.gravityActive then
+            it.vy = it.vy + 26.0 * dt
+        end
+        if self.antigravityActive then
+            it.vy = it.vy - 26.0 * dt
+        end
+        if self.blackholeActive and pHead then
+            local dx = pHead.x - it.px
+            local dy = pHead.y - it.py
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 38.0 / dist
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+        if self.female and self.female.active and self.female.blackholeActive and fHead then
+            local dx = fHead.x - it.px
+            local dy = fHead.y - it.py
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 38.0 / dist
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+        if self.whiteholeActive and pHead then
+            local dx = it.px - pHead.x
+            local dy = it.py - pHead.y
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 48.0 / dist
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+        if self.female and self.female.active and self.female.whiteholeActive and fHead then
+            local dx = it.px - fHead.x
+            local dy = it.py - fHead.y
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 48.0 / dist
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+        if self.magnetActive and pHead and not it.isBox then
+            local dx = pHead.x - it.px
+            local dy = pHead.y - it.py
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 30.0 / math.max(0.8, dist * 0.35)
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+        if self.female and self.female.active and self.female.magnetActive and fHead and not it.isBox then
+            local dx = fHead.x - it.px
+            local dy = fHead.y - it.py
+            local dist = math.max(0.4, math.sqrt(dx*dx + dy*dy))
+            local force = 30.0 / math.max(0.8, dist * 0.35)
+            it.vx = it.vx + (dx / dist) * force * dt
+            it.vy = it.vy + (dy / dist) * force * dt
+        end
+    end
+
+    -- 2. Integrate Position & Damping
+    local damp = math.pow(0.97, dt * 60)
+    for _, it in ipairs(items) do
+        it.px = it.px + it.vx * dt
+        it.py = it.py + it.vy * dt
+        it.rot = (it.rot or 0) + (it.rotVel or 0) * dt
+
+        it.vx = it.vx * damp
+        it.vy = it.vy * damp
+        it.rotVel = (it.rotVel or 0) * damp
+
+        it.x = math.max(1, math.min(cols, math.floor(it.px + 0.5)))
+        it.y = math.max(1, math.min(rows, math.floor(it.py + 0.5)))
+    end
+
+    -- 3. Arena Wall Collisions & Bouncing
+    local bounce = 0.85
+    for _, it in ipairs(items) do
+        local rad = it.radius or 0.45
+        local minX, maxX = 0.5 + rad, cols + 0.5 - rad
+        local minY, maxY = 0.5 + rad, rows + 0.5 - rad
+
+        if not (self.fifthWallActive and (it.px < 1 or it.px > cols or it.py < 1 or it.py > rows)) then
+            if it.px < minX then
+                it.px = minX
+                it.vx = math.abs(it.vx) * bounce
+                it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 6.0
+            elseif it.px > maxX then
+                it.px = maxX
+                it.vx = -math.abs(it.vx) * bounce
+                it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 6.0
+            end
+
+            if it.py < minY then
+                it.py = minY
+                it.vy = math.abs(it.vy) * bounce
+                it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 6.0
+            elseif it.py > maxY then
+                it.py = maxY
+                it.vy = -math.abs(it.vy) * bounce
+                it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 6.0
+            end
+        end
+    end
+
+    -- 4. Item-to-Item Box2D Rigid Body Collision Resolution
+    for i = 1, #items do
+        local a = items[i]
+        for j = i + 1, #items do
+            local b = items[j]
+            local dx = b.px - a.px
+            local dy = b.py - a.py
+            local distSq = dx * dx + dy * dy
+            local minDist = a.radius + b.radius
+            if distSq < minDist * minDist and distSq > 0.0001 then
+                local dist = math.sqrt(distSq)
+                local nx = dx / dist
+                local ny = dy / dist
+                local overlap = 0.5 * (minDist - dist)
+
+                a.px = a.px - nx * overlap
+                a.py = a.py - ny * overlap
+                b.px = b.px + nx * overlap
+                b.py = b.py + ny * overlap
+
+                local kx = a.vx - b.vx
+                local ky = a.vy - b.vy
+                local p = 2 * (nx * kx + ny * ky) / (a.mass + b.mass)
+
+                a.vx = a.vx - p * b.mass * nx * bounce
+                a.vy = a.vy - p * b.mass * ny * bounce
+                b.vx = b.vx + p * a.mass * nx * bounce
+                b.vy = b.vy + p * a.mass * ny * bounce
+
+                a.rotVel = (a.rotVel or 0) + (math.random() - 0.5) * 5.0
+                b.rotVel = (b.rotVel or 0) + (math.random() - 0.5) * 5.0
+            end
+        end
+    end
+
+    -- 5. Snake Physical Impact & Real-time Proximity Eating
+    local eatenItems = {}
+    local function handleSnakeBody(snakeList, isPlayer)
+        if not snakeList or #snakeList == 0 then return end
+        local head = snakeList[1]
+        local headDir = isPlayer and self.dir or (self.female and self.female.direction or {x = 1, y = 0})
+
+        for _, it in ipairs(items) do
+            if not eatenItems[it] then
+                -- Check collision with Head
+                local dx = it.px - head.x
+                local dy = it.py - head.y
+                local distSq = dx * dx + dy * dy
+
+                if it.isBox then
+                    -- Crate: Head kicks crate with strong zero-g impulse
+                    if distSq < 0.95 * 0.95 then
+                        local dist = math.max(0.1, math.sqrt(distSq))
+                        local nx = dx / dist
+                        local ny = dy / dist
+                        it.vx = it.vx + nx * 18.0 + headDir.x * 10.0
+                        it.vy = it.vy + ny * 18.0 + headDir.y * 10.0
+                        it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 14.0
+                        it.px = head.x + nx * 0.95
+                        it.py = head.y + ny * 0.95
+                        Utils.playSFX("tick", 0.9, 0.4)
+                    end
+                else
+                    -- Food/Fruit/Powerup: Head eats floating item smoothly
+                    if distSq < 0.80 * 0.80 then
+                        eatenItems[it] = true
+                        self:eatItem(it, isPlayer)
+                    end
+                end
+
+                -- Check collision with Body Segments (segments 2..N bounce items)
+                for segIdx = 2, #snakeList do
+                    local seg = snakeList[segIdx]
+                    local bdx = it.px - seg.x
+                    local bdy = it.py - seg.y
+                    local bDistSq = bdx * bdx + bdy * bdy
+                    if bDistSq < 0.88 * 0.88 and bDistSq > 0.0001 then
+                        local bDist = math.sqrt(bDistSq)
+                        local bnx = bdx / bDist
+                        local bny = bdy / bDist
+                        local bOverlap = 0.88 - bDist
+
+                        it.vx = it.vx + bnx * 10.0
+                        it.vy = it.vy + bny * 10.0
+                        it.rotVel = (it.rotVel or 0) + (math.random() - 0.5) * 8.0
+                        it.px = it.px + bnx * bOverlap
+                        it.py = it.py + bny * bOverlap
+                    end
+                end
+            end
+        end
+    end
+
+    handleSnakeBody(self.snake, true)
+    if self.female and self.female.active then
+        handleSnakeBody(self.female.body, false)
+    end
 end
 
 -- ============================================================
@@ -1054,6 +1537,20 @@ function SnakeGame:applyPowerUp(powerUp)
         self.gravityStepTimer = 0
         Utils.playSFX("levelup", 1.4, 0.7)
         Utils.notify("Snake", "GRAVITY FRUIT! Downward Gravitational Pull (5s)!", nil, 2.0)
+
+    elseif ptype == "antigravity" then
+        self:addScore(50)
+        self.antigravityActive = true
+        self.antigravityTimer = Config.antigravityDuration or 5.0
+        self.antigravityStepTimer = 0
+        Utils.playSFX("levelup", 1.4, 0.7)
+        Utils.notify("Snake", "ANTIGRAVITY FRUIT! Upward Gravitational Pull (5s)!", nil, 2.0)
+
+    elseif ptype == "physicsfruit" then
+        self:addScore(50)
+        self:activatePhysicsMode()
+        Utils.playSFX("levelup", 1.6, 0.8)
+        Utils.notify("Snake", "PHYSICS FRUIT! Zero-G Rigid Body Active (8s)!", nil, 2.5)
     end
 end
 
@@ -1539,109 +2036,26 @@ function SnakeGame:update(dt)
         self.whiteholeTimer = self.whiteholeTimer - dt
         if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
 
-        local head = self.snake[1]
-        local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
-        local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-
-        local function repelItem(item)
-            if item and head then
-                local dx = item.x - head.x
-                local dy = item.y - head.y
-                local dist = math.abs(dx) + math.abs(dy)
-                if dist > 1 then
-                    local nx = item.x
-                    local ny = item.y
-                    if math.abs(dx) >= math.abs(dy) then
-                        nx = item.x + (dx > 0 and 1 or -1)
-                    else
-                        ny = item.y + (dy > 0 and 1 or -1)
-                    end
-                    nx = math.max(1, math.min(cols, nx))
-                    ny = math.max(1, math.min(rows, ny))
-                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
-                        item.x = nx
-                        item.y = ny
-                    end
-                end
-            end
-        end
-
-        repelItem(self.food)
-        repelItem(self.powerUp)
-        repelItem(self.greenFruit)
-        repelItem(self.goldenFruit)
-        if self.inForbiddenRealm then
-            for _, f in ipairs(self.forbiddenFoods) do repelItem(f) end
-        end
-    end
-
-    -- Blackhole physics (attracts items towards snake head)
-    if self.blackholeActive then
-        self.blackholeTimer = self.blackholeTimer - dt
-        if self.blackholeTimer <= 0 then self.blackholeActive = false end
-
-        local head = self.snake[1]
-        local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
-        local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-
-        local function attractItem(item)
-            if item and head then
-                local dx = head.x - item.x
-                local dy = head.y - item.y
-                local dist = math.abs(dx) + math.abs(dy)
-                if dist > 1 then
-                    local nx = item.x
-                    local ny = item.y
-                    if math.abs(dx) >= math.abs(dy) then
-                        nx = item.x + (dx > 0 and 1 or -1)
-                    else
-                        ny = item.y + (dy > 0 and 1 or -1)
-                    end
-                    nx = math.max(1, math.min(cols, nx))
-                    ny = math.max(1, math.min(rows, ny))
-                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
-                        item.x = nx
-                        item.y = ny
-                    end
-                end
-            end
-        end
-
-        attractItem(self.food)
-        attractItem(self.powerUp)
-        attractItem(self.greenFruit)
-        attractItem(self.goldenFruit)
-        if self.inForbiddenRealm then
-            for _, f in ipairs(self.forbiddenFoods) do attractItem(f) end
-        end
-    end
-
-    -- Cosmic Magnet physics (pull foods and shards smoothly towards snake head)
-    if self.magnetActive then
-        self.magnetTimer = self.magnetTimer - dt
-        if self.magnetTimer <= 0 then self.magnetActive = false end
-
-        self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
-        if self.magnetStepTimer >= 0.12 then
-            self.magnetStepTimer = 0
+        if not self.physicsActive then
             local head = self.snake[1]
             local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
             local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
 
-            local function pullItem(item)
+            local function repelItem(item)
                 if item and head then
-                    local dx = head.x - item.x
-                    local dy = head.y - item.y
-                    if math.abs(dx) > 0 or math.abs(dy) > 0 then
-                        local stepX = 0
-                        local stepY = 0
+                    local dx = item.x - head.x
+                    local dy = item.y - head.y
+                    local dist = math.abs(dx) + math.abs(dy)
+                    if dist > 1 then
+                        local nx = item.x
+                        local ny = item.y
                         if math.abs(dx) >= math.abs(dy) then
-                            stepX = (dx > 0) and 1 or -1
+                            nx = item.x + (dx > 0 and 1 or -1)
                         else
-                            stepY = (dy > 0) and 1 or -1
+                            ny = item.y + (dy > 0 and 1 or -1)
                         end
-                        local nx = math.max(1, math.min(cols, item.x + stepX))
-                        local ny = math.max(1, math.min(rows, item.y + stepY))
+                        nx = math.max(1, math.min(cols, nx))
+                        ny = math.max(1, math.min(rows, ny))
                         if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
                             item.x = nx
                             item.y = ny
@@ -1650,22 +2064,123 @@ function SnakeGame:update(dt)
                 end
             end
 
-            pullItem(self.food)
-            pullItem(self.greenFruit)
-            pullItem(self.goldenFruit)
+            repelItem(self.food)
+            repelItem(self.powerUp)
+            repelItem(self.greenFruit)
+            repelItem(self.goldenFruit)
             if self.inForbiddenRealm then
-                for _, f in ipairs(self.forbiddenFoods) do pullItem(f) end
+                for _, f in ipairs(self.forbiddenFoods) do repelItem(f) end
             end
         end
     end
 
-    -- Gravity Fruit physics (pulls everything downwards toward bottom, excluding player and female snake)
+    -- Blackhole physics (attracts items towards snake head)
+    if self.blackholeActive then
+        self.blackholeTimer = self.blackholeTimer - dt
+        if self.blackholeTimer <= 0 then self.blackholeActive = false end
+
+        if not self.physicsActive then
+            local head = self.snake[1]
+            local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+            local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+            local function attractItem(item)
+                if item and head then
+                    local dx = head.x - item.x
+                    local dy = head.y - item.y
+                    local dist = math.abs(dx) + math.abs(dy)
+                    if dist > 1 then
+                        local nx = item.x
+                        local ny = item.y
+                        if math.abs(dx) >= math.abs(dy) then
+                            nx = item.x + (dx > 0 and 1 or -1)
+                        else
+                            ny = item.y + (dy > 0 and 1 or -1)
+                        end
+                        nx = math.max(1, math.min(cols, nx))
+                        ny = math.max(1, math.min(rows, ny))
+                        if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
+                            item.x = nx
+                            item.y = ny
+                        end
+                    end
+                end
+            end
+
+            attractItem(self.food)
+            attractItem(self.powerUp)
+            attractItem(self.greenFruit)
+            attractItem(self.goldenFruit)
+            if self.inForbiddenRealm then
+                for _, f in ipairs(self.forbiddenFoods) do attractItem(f) end
+            end
+        end
+    end
+
+    -- Cosmic Magnet physics (pull foods and shards smoothly towards snake head)
+    if self.magnetActive then
+        self.magnetTimer = self.magnetTimer - dt
+        if self.magnetTimer <= 0 then self.magnetActive = false end
+
+        if not self.physicsActive then
+            self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
+            if self.magnetStepTimer >= 0.12 then
+                self.magnetStepTimer = 0
+                local head = self.snake[1]
+                local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+                local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+                local function pullItem(item)
+                    if item and head then
+                        local dx = head.x - item.x
+                        local dy = head.y - item.y
+                        if math.abs(dx) > 0 or math.abs(dy) > 0 then
+                            local stepX = 0
+                            local stepY = 0
+                            if math.abs(dx) >= math.abs(dy) then
+                                stepX = (dx > 0) and 1 or -1
+                            else
+                                stepY = (dy > 0) and 1 or -1
+                            end
+                            local nx = math.max(1, math.min(cols, item.x + stepX))
+                            local ny = math.max(1, math.min(rows, item.y + stepY))
+                            if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
+                                item.x = nx
+                                item.y = ny
+                            end
+                        end
+                    end
+                end
+
+                pullItem(self.food)
+                pullItem(self.greenFruit)
+                pullItem(self.goldenFruit)
+                if self.inForbiddenRealm then
+                    for _, f in ipairs(self.forbiddenFoods) do pullItem(f) end
+                end
+            end
+        end
+    end
+
     if self.gravityActive then
         self.gravityTimer = self.gravityTimer - dt
-        if self.gravityTimer <= 0 then
-            self.gravityActive = false
+        if self.gravityTimer <= 0 then self.gravityActive = false end
+    end
+    if self.antigravityActive then
+        self.antigravityTimer = self.antigravityTimer - dt
+        if self.antigravityTimer <= 0 then self.antigravityActive = false end
+    end
+    if self.physicsActive then
+        self.physicsTimer = self.physicsTimer - dt
+        if self.physicsTimer <= 0 then
+            self:deactivatePhysicsMode()
+        else
+            self:updatePhysicsSimulation(dt)
         end
+    end
 
+    -- Gravity Fruit grid-step physics (when physics mode is inactive)
+    if self.gravityActive and not self.physicsActive then
         self.gravityStepTimer = (self.gravityStepTimer or 0) + dt
         if self.gravityStepTimer >= 0.14 then
             self.gravityStepTimer = 0
@@ -1715,6 +2230,63 @@ function SnakeGame:update(dt)
                 for _, of in ipairs(self.outsideFoods) do
                     if self:isOutsideCellFree(of.x, of.y + 1) then
                         of.y = of.y + 1
+                    end
+                end
+            end
+        end
+    end
+
+    -- Antigravity Fruit grid-step physics (when physics mode is inactive)
+    if self.antigravityActive and not self.physicsActive then
+        self.antigravityStepTimer = (self.antigravityStepTimer or 0) + dt
+        if self.antigravityStepTimer >= 0.14 then
+            self.antigravityStepTimer = 0
+
+            local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+            local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+            local function moveItemUp(item)
+                if not item then return false end
+                local nx = item.x
+                local ny = item.y - 1
+                if ny >= 1 then
+                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes) then
+                        item.y = ny
+                        return true
+                    end
+                end
+                return false
+            end
+
+            local movableItems = {}
+            if self.food then table.insert(movableItems, self.food) end
+            if self.powerUp then table.insert(movableItems, self.powerUp) end
+            if self.greenFruit then table.insert(movableItems, self.greenFruit) end
+            if self.goldenFruit then table.insert(movableItems, self.goldenFruit) end
+            if self.boxes then
+                for _, b in ipairs(self.boxes) do
+                    if b.y >= 1 and b.y <= rows and b.x >= 1 and b.x <= cols then
+                        table.insert(movableItems, b)
+                    end
+                end
+            end
+            if self.inForbiddenRealm and self.forbiddenFoods then
+                for _, f in ipairs(self.forbiddenFoods) do
+                    table.insert(movableItems, f)
+                end
+            end
+
+            table.sort(movableItems, function(a, b) return a.y < b.y end)
+
+            for _, item in ipairs(movableItems) do
+                moveItemUp(item)
+            end
+
+            if self.fifthWallActive and self.outsideFoods then
+                table.sort(self.outsideFoods, function(a, b) return a.y < b.y end)
+                for _, of in ipairs(self.outsideFoods) do
+                    if self:isOutsideCellFree(of.x, of.y - 1) then
+                        of.y = of.y - 1
                     end
                 end
             end
@@ -1946,94 +2518,113 @@ function SnakeGame:update(dt)
             if hitBoxIndex then
                 self:checkDiscovery("box")
                 local box = self.boxes[hitBoxIndex]
-                local pushTargetX = box.x + self.dir.x
-                local pushTargetY = box.y + self.dir.y
+                if self.physicsActive then
+                    -- Zero-G Physics: Snake head kicks box with physical impulse without blocking movement
+                    box.vx = (box.vx or 0) + self.dir.x * 16.0
+                    box.vy = (box.vy or 0) + self.dir.y * 16.0
+                    box.rotVel = (box.rotVel or 0) + (math.random() - 0.5) * 12.0
+                    Utils.playSFX("tick", 0.9, 0.5)
+                else
+                    local pushTargetX = box.x + self.dir.x
+                    local pushTargetY = box.y + self.dir.y
 
-                local boxWasInside = (box.x >= 1 and box.x <= cols and box.y >= 1 and box.y <= rows)
-                local targetIsInside = (pushTargetX >= 1 and pushTargetX <= cols and pushTargetY >= 1 and pushTargetY <= rows)
+                    local boxWasInside = (box.x >= 1 and box.x <= cols and box.y >= 1 and box.y <= rows)
+                    local targetIsInside = (pushTargetX >= 1 and pushTargetX <= cols and pushTargetY >= 1 and pushTargetY <= rows)
 
-                if boxWasInside and not targetIsInside then
-                    -- Box was inside the arena and pushed outside the window/bounds! Smash & Destroy!
-                    table.remove(self.boxes, hitBoxIndex)
-                    local pts = (Config.boxScore or 100) * scoreMult
-                    self:addScore(pts)
-                    self:spawnBoxParticles(box.x, box.y)
-                    Utils.playSFX("glitch", 1.4, 0.5)
-                    Utils.notify("Smash!", "Box smashed outside the arena! +" .. pts .. " pts", nil, 2.0)
-                    if self.fifthWallActive then
-                        self:spawnOutsideBox()
-                    end
-                elseif not boxWasInside and targetIsInside then
-                    -- Box was outside and pushed TO THE BOUNDS into the arena!
-                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
-                    if free then
-                        box.x = pushTargetX
-                        box.y = pushTargetY
-                        Utils.playSFX("tick", 0.7, 0.4)
-                        Utils.notify("In Bounds!", "Crate pushed into the arena bounds!", nil, 1.5)
-                    else
-                        -- Target cell inside arena is blocked! Snake movement is blocked
-                        return
-                    end
-                elseif not boxWasInside and not targetIsInside then
-                    -- Box was outside and pushed to another outside cell on desktop
-                    local mainWinX, mainWinY = 0, 0
-                    if love.window and love.window.getPosition then
-                        mainWinX, mainWinY = love.window.getPosition()
-                    end
-                    local boardX, boardY, _, _, scale = self:getBoardGeometry()
-                    local size = self.gridSize * scale
-                    local absX = mainWinX + boardX + (pushTargetX - 1) * size
-                    local absY = mainWinY + boardY + (pushTargetY - 1) * size
-                    local dw, dh = 1920, 1080
-                    if love.window and love.window.getDesktopDimensions then
-                        local w, h = love.window.getDesktopDimensions(1)
-                        if w and h and w > 0 and h > 0 then dw, dh = w, h end
-                    end
-
-                    local isOffscreen = (absX < 0 or absX + size > dw or absY < 0 or absY + size > dh)
-                    if isOffscreen then
-                        -- Pushed outside desktop screen bounds! Smash & Destroy!
+                    if boxWasInside and not targetIsInside then
+                        -- Box was inside the arena and pushed outside the window/bounds! Smash & Destroy!
                         table.remove(self.boxes, hitBoxIndex)
                         local pts = (Config.boxScore or 100) * scoreMult
                         self:addScore(pts)
                         self:spawnBoxParticles(box.x, box.y)
                         Utils.playSFX("glitch", 1.4, 0.5)
-                        Utils.notify("Smash!", "Crate smashed beyond desktop bounds! +" .. pts .. " pts", nil, 2.0)
+                        Utils.notify("Smash!", "Box smashed outside the arena! +" .. pts .. " pts", nil, 2.0)
                         if self.fifthWallActive then
                             self:spawnOutsideBox()
                         end
+                    elseif not boxWasInside and targetIsInside then
+                        -- Box was outside and pushed TO THE BOUNDS into the arena!
+                        local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
+                        if free then
+                            box.x = pushTargetX
+                            box.y = pushTargetY
+                            Utils.playSFX("tick", 0.7, 0.4)
+                            Utils.notify("In Bounds!", "Crate pushed into the arena bounds!", nil, 1.5)
+                        else
+                            -- Target cell inside arena is blocked! Snake movement is blocked
+                            return
+                        end
+                    elseif not boxWasInside and not targetIsInside then
+                        -- Box was outside and pushed to another outside cell on desktop
+                        local mainWinX, mainWinY = 0, 0
+                        if love.window and love.window.getPosition then
+                            mainWinX, mainWinY = love.window.getPosition()
+                        end
+                        local boardX, boardY, _, _, scale = self:getBoardGeometry()
+                        local size = self.gridSize * scale
+                        local absX = mainWinX + boardX + (pushTargetX - 1) * size
+                        local absY = mainWinY + boardY + (pushTargetY - 1) * size
+                        local dw, dh = 1920, 1080
+                        if love.window and love.window.getDesktopDimensions then
+                            local w, h = love.window.getDesktopDimensions(1)
+                            if w and h and w > 0 and h > 0 then dw, dh = w, h end
+                        end
+
+                        local isOffscreen = (absX < 0 or absX + size > dw or absY < 0 or absY + size > dh)
+                        if isOffscreen then
+                            -- Pushed outside desktop screen bounds! Smash & Destroy!
+                            table.remove(self.boxes, hitBoxIndex)
+                            local pts = (Config.boxScore or 100) * scoreMult
+                            self:addScore(pts)
+                            self:spawnBoxParticles(box.x, box.y)
+                            Utils.playSFX("glitch", 1.4, 0.5)
+                            Utils.notify("Smash!", "Crate smashed beyond desktop bounds! +" .. pts .. " pts", nil, 2.0)
+                            if self.fifthWallActive then
+                                self:spawnOutsideBox()
+                            end
+                        else
+                            local free = self:isOutsideCellFree(pushTargetX, pushTargetY)
+                            if free then
+                                box.x = pushTargetX
+                                box.y = pushTargetY
+                                Utils.playSFX("tick", 0.7, 0.4)
+                            else
+                                -- Push target blocked on desktop! Snake movement is blocked
+                                return
+                            end
+                        end
                     else
-                        local free = self:isOutsideCellFree(pushTargetX, pushTargetY)
+                        -- Box was inside and pushed inside arena
+                        local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
                         if free then
                             box.x = pushTargetX
                             box.y = pushTargetY
                             Utils.playSFX("tick", 0.7, 0.4)
                         else
-                            -- Push target blocked on desktop! Snake movement is blocked
+                            -- Push target blocked! Snake movement is blocked
                             return
                         end
-                    end
-                else
-                    -- Box was inside and pushed inside arena
-                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
-                    if free then
-                        box.x = pushTargetX
-                        box.y = pushTargetY
-                        Utils.playSFX("tick", 0.7, 0.4)
-                    else
-                        -- Push target blocked! Snake movement is blocked
-                        return
                     end
                 end
             end
 
             table.insert(self.snake, 1, newHead)
 
+            -- Eat items (supports zero-g float coordinates & grid cells)
+            local function checkSnakeItemHit(item)
+                if not item then return false end
+                if self.physicsActive and item.px and item.py then
+                    local dx = newHead.x - item.px
+                    local dy = newHead.y - item.py
+                    return (dx * dx + dy * dy) <= (0.75 * 0.75)
+                end
+                return newHead.x == item.x and newHead.y == item.y
+            end
+
             local ate = false
 
             if not self.inForbiddenRealm then
-                if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
+                if self.food and checkSnakeItemHit(self.food) then
                     self:checkDiscovery("food")
                     local pts = 10 * scoreMult
                     self:addScore(pts)
@@ -2046,7 +2637,7 @@ function SnakeGame:update(dt)
                 if self.fifthWallActive and self.outsideFoods then
                     for fi = #self.outsideFoods, 1, -1 do
                         local of = self.outsideFoods[fi]
-                        if newHead.x == of.x and newHead.y == of.y then
+                        if checkSnakeItemHit(of) then
                             self:checkDiscovery("food")
                             local pts = 25 * scoreMult
                             self:addScore(pts)
@@ -2060,7 +2651,7 @@ function SnakeGame:update(dt)
                         end
                     end
                 end
-                if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
+                if self.greenFruit and checkSnakeItemHit(self.greenFruit) then
                     self:checkDiscovery("greenfruit")
                     local pts = 200 * scoreMult
                     self:addScore(pts)
@@ -2074,12 +2665,12 @@ function SnakeGame:update(dt)
                     self.greenFruitTimer = 0
                     ate = true
                 end
-                if self.powerUp and newHead.x == self.powerUp.x and newHead.y == self.powerUp.y then
+                if self.powerUp and checkSnakeItemHit(self.powerUp) then
                     self:applyPowerUp(self.powerUp)
                     self.powerUp = nil
                     ate = true
                 end
-                if self.goldenFruit and newHead.x == self.goldenFruit.x and newHead.y == self.goldenFruit.y then
+                if self.goldenFruit and checkSnakeItemHit(self.goldenFruit) then
                     self:applyGoldenFruit(self.goldenFruit)
                     self.goldenFruit = nil
                     self.goldenFruitTimer = 0
@@ -2088,7 +2679,7 @@ function SnakeGame:update(dt)
             else
                 for i = #self.forbiddenFoods, 1, -1 do
                     local f = self.forbiddenFoods[i]
-                    if newHead.x == f.x and newHead.y == f.y then
+                    if checkSnakeItemHit(f) then
                         self:checkDiscovery("forbidden_food_" .. f.type)
                         if f.type == 2 then
                             self.forbiddenTimer = math.min(self.forbiddenTimer + 2.5, 15.0)
@@ -2126,6 +2717,27 @@ end
 -- ============================================================
 -- DRAWING & OVERLAYS
 -- ============================================================
+function SnakeGame:drawPhysicsOrGridIcon(iconKey, item, boardX, boardY, scale)
+    if not item then return end
+    local size = self.gridSize * scale
+    local gx = (self.physicsActive and (item.px or item.x)) or item.x
+    local gy = (self.physicsActive and (item.py or item.y)) or item.y
+    local drawX = boardX + (gx - 1) * size
+    local drawY = boardY + (gy - 1) * size
+
+    if self.physicsActive and item.rot and item.rot ~= 0 then
+        love.graphics.push()
+        local cx = drawX + size / 2
+        local cy = drawY + size / 2
+        love.graphics.translate(cx, cy)
+        love.graphics.rotate(item.rot)
+        Codex.drawIcon(iconKey, -size / 2, -size / 2, size)
+        love.graphics.pop()
+    else
+        Codex.drawIcon(iconKey, drawX, drawY, size)
+    end
+end
+
 function SnakeGame:draw(x, y, width, height)
     self.width = width
     self.height = height
@@ -2207,6 +2819,8 @@ function SnakeGame:draw(x, y, width, height)
     if self.whiteholeActive then statuses[#statuses+1] = {text = "WH", color = {1.0, 1.0, 1.0}} end
     if self.blackholeActive then statuses[#statuses+1] = {text = "BH", color = {0.4, 0.4, 0.4}} end
     if self.gravityActive then statuses[#statuses+1] = {text = "GRAV", color = {0.7, 0.3, 0.95}} end
+    if self.antigravityActive then statuses[#statuses+1] = {text = "AGRAV", color = {0.2, 0.9, 0.85}} end
+    if self.physicsActive then statuses[#statuses+1] = {text = "ZERO-G", color = {0.95, 0.8, 0.1}} end
     if self.lustActive then statuses[#statuses+1] = {text = "LUST (3X)", color = {1.0, 0.2, 0.6}} end
     if self.invincible then statuses[#statuses+1] = {text = "SHIELD", color = {1.0, 0.85, 0.2}} end
     if self.inForbiddenRealm then statuses[#statuses+1] = {text = "REALM", color = {0.8, 0.3, 0.9}} end
@@ -2250,28 +2864,19 @@ function SnakeGame:draw(x, y, width, height)
 
     -- Normal Food
     if self.food and not self.inForbiddenRealm then
-        local fx = boardX + (self.food.x - 1) * self.gridSize * scale
-        local fy = boardY + (self.food.y - 1) * self.gridSize * scale
-        local size = self.gridSize * scale
-        Codex.drawIcon("food", fx, fy, size)
+        self:drawPhysicsOrGridIcon("food", self.food, boardX, boardY, scale)
     end
 
     -- Outside Foods (5th Wall Breakout)
     if self.fifthWallActive and self.outsideFoods then
         for _, f in ipairs(self.outsideFoods) do
-            local fx = boardX + (f.x - 1) * self.gridSize * scale
-            local fy = boardY + (f.y - 1) * self.gridSize * scale
-            local size = self.gridSize * scale
-            Codex.drawIcon("food", fx, fy, size)
+            self:drawPhysicsOrGridIcon("food", f, boardX, boardY, scale)
         end
     end
 
     -- Lime Green Apple (Rare Fruit)
     if self.greenFruit and not self.inForbiddenRealm then
-        local gx = boardX + (self.greenFruit.x - 1) * self.gridSize * scale
-        local gy = boardY + (self.greenFruit.y - 1) * self.gridSize * scale
-        local size = self.gridSize * scale
-        Codex.drawIcon("greenfruit", gx, gy, size)
+        self:drawPhysicsOrGridIcon("greenfruit", self.greenFruit, boardX, boardY, scale)
     end
 
     -- Forbidden Foods
@@ -2282,37 +2887,25 @@ function SnakeGame:draw(x, y, width, height)
                 skip = true
             end
             if not skip then
-                local fx = boardX + (f.x - 1) * self.gridSize * scale
-                local fy = boardY + (f.y - 1) * self.gridSize * scale
-                local size = self.gridSize * scale
-                Codex.drawIcon("forbidden_food_" .. f.type, fx, fy, size)
+                self:drawPhysicsOrGridIcon("forbidden_food_" .. f.type, f, boardX, boardY, scale)
             end
         end
     end
 
     -- Power-up
     if self.powerUp and not self.inForbiddenRealm then
-        local px = boardX + (self.powerUp.x - 1) * self.gridSize * scale
-        local py = boardY + (self.powerUp.y - 1) * self.gridSize * scale
-        local size = self.gridSize * scale
-        Codex.drawIcon(self.powerUp.type, px, py, size)
+        self:drawPhysicsOrGridIcon(self.powerUp.type, self.powerUp, boardX, boardY, scale)
     end
 
     -- Golden Fruit
     if self.goldenFruit and not self.inForbiddenRealm then
-        local gx = boardX + (self.goldenFruit.x - 1) * self.gridSize * scale
-        local gy = boardY + (self.goldenFruit.y - 1) * self.gridSize * scale
-        local size = self.gridSize * scale
-        Codex.drawIcon("goldenfruit", gx, gy, size)
+        self:drawPhysicsOrGridIcon("goldenfruit", self.goldenFruit, boardX, boardY, scale)
     end
 
     -- Wooden Boxes (Interactive Obstacles)
     if self.boxes and #self.boxes > 0 then
         for _, b in ipairs(self.boxes) do
-            local bx = boardX + (b.x - 1) * self.gridSize * scale
-            local by = boardY + (b.y - 1) * self.gridSize * scale
-            local size = self.gridSize * scale
-            Codex.drawIcon("box", bx, by, size)
+            self:drawPhysicsOrGridIcon("box", b, boardX, boardY, scale)
         end
     end
 

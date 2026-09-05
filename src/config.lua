@@ -34,6 +34,8 @@ Config.speedFoodDuration = 5.0
 Config.speedFoodMultiplier = 1.8
 Config.stopDuration = 5.0
 Config.gravityFruitDuration = 5.0
+Config.antigravityDuration = 5.0
+Config.physicsFruitDuration = 8.0
 Config.boxSpawnInterval = 18.0
 Config.maxBoxes = 3
 Config.initialBoxes = 1
@@ -79,7 +81,9 @@ Config.powerUpTypes = {
     "fifthwall",
     "speedfood",
     "stopfood",
-    "gravityfruit"
+    "gravityfruit",
+    "antigravity",
+    "physicsfruit"
 }
 
 -- Color Palettes
@@ -94,27 +98,29 @@ Config.colors = {
     forbidden_food_2 = {0.2, 0.85, 1.0}, -- Chrono Shard (Cyan)
 
     -- Power-ups
-    shorten     = {0.8, 0.4, 0.9},
-    reverse     = {0.2, 0.9, 0.9},
-    nocollision = {0.0, 1.0, 0.6},
-    slowdown    = {0.3, 0.7, 1.0},
-    extralife   = {0.95, 0.2, 0.5},
-    devilfruit  = {0.95, 0.1, 0.1},
-    rainbow     = {0.9, 0.2, 0.9},
-    magnet      = {0.15, 0.15, 0.25},
-    colorchange = {0.2, 0.9, 0.6},
-    whitehole   = {1.0, 1.0, 1.0},
-    blackhole   = {0.0, 0.0, 0.0},
-    wormhole    = {0.19, 0.10, 0.20},
-    mate        = {1.0, 0.4, 0.7},
-    lustfood    = {1.0, 0.08, 0.58},
-    forbidden   = {0.6, 0.1, 0.8},
-    fourthwall  = {0.0, 0.8, 0.8},
-    fifthwall   = {0.0, 1.0, 0.4},
-    speedfood   = {1.0, 0.9, 0.1},
-    stopfood    = {0.95, 0.25, 0.25},
+    shorten      = {0.8, 0.4, 0.9},
+    reverse      = {0.2, 0.9, 0.9},
+    nocollision  = {0.0, 1.0, 0.6},
+    slowdown     = {0.3, 0.7, 1.0},
+    extralife    = {0.95, 0.2, 0.5},
+    devilfruit   = {0.95, 0.1, 0.1},
+    rainbow      = {0.9, 0.2, 0.9},
+    magnet       = {0.15, 0.15, 0.25},
+    colorchange  = {0.2, 0.9, 0.6},
+    whitehole    = {1.0, 1.0, 1.0},
+    blackhole    = {0.0, 0.0, 0.0},
+    wormhole     = {0.19, 0.10, 0.20},
+    mate         = {1.0, 0.4, 0.7},
+    lustfood     = {1.0, 0.08, 0.58},
+    forbidden    = {0.6, 0.1, 0.8},
+    fourthwall   = {0.0, 0.8, 0.8},
+    fifthwall    = {0.0, 1.0, 0.4},
+    speedfood    = {1.0, 0.9, 0.1},
+    stopfood     = {0.95, 0.25, 0.25},
     gravityfruit = {0.6, 0.25, 0.85},
-    box         = {0.68, 0.42, 0.22},
+    antigravity  = {0.2, 0.9, 0.85},
+    physicsfruit = {0.95, 0.8, 0.1},
+    box          = {0.68, 0.42, 0.22},
     boxBorder   = {0.38, 0.22, 0.08},
 
     -- Snake Defaults

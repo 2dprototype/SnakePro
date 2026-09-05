@@ -317,6 +317,14 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         game.gravityTimer = Config.gravityFruitDuration or 5.0
         game.gravityStepTimer = 0
         Utils.notify("Snake", "Female Gravity Fruit! Downward Pull (5s)!", nil, 2.0)
+    elseif ptype == "antigravity" then
+        game.antigravityActive = true
+        game.antigravityTimer = Config.antigravityDuration or 5.0
+        game.antigravityStepTimer = 0
+        Utils.notify("Snake", "Female Antigravity Fruit! Upward Pull (5s)!", nil, 2.0)
+    elseif ptype == "physicsfruit" then
+        game:activatePhysicsMode()
+        Utils.notify("Snake", "Female Physics Fruit! Zero-G Active (8s)!", nil, 2.0)
     end
     Utils.playSFX("tick", 1.0, 0.3)
 end
@@ -389,109 +397,26 @@ function FemaleSnake:update(dt, game)
         self.whiteholeTimer = self.whiteholeTimer - dt
         if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
 
-        local head = self.body[1]
-        local cols = self.inForbidden and Config.forbiddenCols or Config.cols
-        local rows = self.inForbidden and Config.forbiddenRows or Config.rows
-
-        local function repelItem(item)
-            if item and head then
-                local dx = item.x - head.x
-                local dy = item.y - head.y
-                local dist = math.abs(dx) + math.abs(dy)
-                if dist > 1 then
-                    local nx = item.x
-                    local ny = item.y
-                    if math.abs(dx) >= math.abs(dy) then
-                        nx = item.x + (dx > 0 and 1 or -1)
-                    else
-                        ny = item.y + (dy > 0 and 1 or -1)
-                    end
-                    nx = math.max(1, math.min(cols, nx))
-                    ny = math.max(1, math.min(rows, ny))
-                    if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
-                        item.x = nx
-                        item.y = ny
-                    end
-                end
-            end
-        end
-
-        repelItem(game.food)
-        repelItem(game.powerUp)
-        repelItem(game.greenFruit)
-        repelItem(game.goldenFruit)
-        if self.inForbidden then
-            for _, f in ipairs(game.forbiddenFoods or {}) do repelItem(f) end
-        end
-    end
-
-    -- Female Blackhole Physics
-    if self.blackholeActive then
-        self.blackholeTimer = self.blackholeTimer - dt
-        if self.blackholeTimer <= 0 then self.blackholeActive = false end
-
-        local head = self.body[1]
-        local cols = self.inForbidden and Config.forbiddenCols or Config.cols
-        local rows = self.inForbidden and Config.forbiddenRows or Config.rows
-
-        local function attractItem(item)
-            if item and head then
-                local dx = head.x - item.x
-                local dy = head.y - item.y
-                local dist = math.abs(dx) + math.abs(dy)
-                if dist > 1 then
-                    local nx = item.x
-                    local ny = item.y
-                    if math.abs(dx) >= math.abs(dy) then
-                        nx = item.x + (dx > 0 and 1 or -1)
-                    else
-                        ny = item.y + (dy > 0 and 1 or -1)
-                    end
-                    nx = math.max(1, math.min(cols, nx))
-                    ny = math.max(1, math.min(rows, ny))
-                    if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
-                        item.x = nx
-                        item.y = ny
-                    end
-                end
-            end
-        end
-
-        attractItem(game.food)
-        attractItem(game.powerUp)
-        attractItem(game.greenFruit)
-        attractItem(game.goldenFruit)
-        if self.inForbidden then
-            for _, f in ipairs(game.forbiddenFoods or {}) do attractItem(f) end
-        end
-    end
-
-    -- Female Cosmic Magnet Physics
-    if self.magnetActive then
-        self.magnetTimer = self.magnetTimer - dt
-        if self.magnetTimer <= 0 then self.magnetActive = false end
-
-        self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
-        if self.magnetStepTimer >= 0.12 then
-            self.magnetStepTimer = 0
+        if not game.physicsActive then
             local head = self.body[1]
             local cols = self.inForbidden and Config.forbiddenCols or Config.cols
             local rows = self.inForbidden and Config.forbiddenRows or Config.rows
 
-            local function pullItem(item)
+            local function repelItem(item)
                 if item and head then
-                    local dx = head.x - item.x
-                    local dy = head.y - item.y
-                    if math.abs(dx) > 0 or math.abs(dy) > 0 then
-                        local stepX = 0
-                        local stepY = 0
+                    local dx = item.x - head.x
+                    local dy = item.y - head.y
+                    local dist = math.abs(dx) + math.abs(dy)
+                    if dist > 1 then
+                        local nx = item.x
+                        local ny = item.y
                         if math.abs(dx) >= math.abs(dy) then
-                            stepX = (dx > 0) and 1 or -1
+                            nx = item.x + (dx > 0 and 1 or -1)
                         else
-                            stepY = (dy > 0) and 1 or -1
+                            ny = item.y + (dy > 0 and 1 or -1)
                         end
-                        local nx = math.max(1, math.min(cols, item.x + stepX))
-                        local ny = math.max(1, math.min(rows, item.y + stepY))
+                        nx = math.max(1, math.min(cols, nx))
+                        ny = math.max(1, math.min(rows, ny))
                         if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
                             item.x = nx
                             item.y = ny
@@ -500,11 +425,100 @@ function FemaleSnake:update(dt, game)
                 end
             end
 
-            pullItem(game.food)
-            pullItem(game.greenFruit)
-            pullItem(game.goldenFruit)
+            repelItem(game.food)
+            repelItem(game.powerUp)
+            repelItem(game.greenFruit)
+            repelItem(game.goldenFruit)
             if self.inForbidden then
-                for _, f in ipairs(game.forbiddenFoods or {}) do pullItem(f) end
+                for _, f in ipairs(game.forbiddenFoods or {}) do repelItem(f) end
+            end
+        end
+    end
+
+    -- Female Blackhole Physics
+    if self.blackholeActive then
+        self.blackholeTimer = self.blackholeTimer - dt
+        if self.blackholeTimer <= 0 then self.blackholeActive = false end
+
+        if not game.physicsActive then
+            local head = self.body[1]
+            local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+            local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+
+            local function attractItem(item)
+                if item and head then
+                    local dx = head.x - item.x
+                    local dy = head.y - item.y
+                    local dist = math.abs(dx) + math.abs(dy)
+                    if dist > 1 then
+                        local nx = item.x
+                        local ny = item.y
+                        if math.abs(dx) >= math.abs(dy) then
+                            nx = item.x + (dx > 0 and 1 or -1)
+                        else
+                            ny = item.y + (dy > 0 and 1 or -1)
+                        end
+                        nx = math.max(1, math.min(cols, nx))
+                        ny = math.max(1, math.min(rows, ny))
+                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                            item.x = nx
+                            item.y = ny
+                        end
+                    end
+                end
+            end
+
+            attractItem(game.food)
+            attractItem(game.powerUp)
+            attractItem(game.greenFruit)
+            attractItem(game.goldenFruit)
+            if self.inForbidden then
+                for _, f in ipairs(game.forbiddenFoods or {}) do attractItem(f) end
+            end
+        end
+    end
+
+    -- Female Cosmic Magnet Physics
+    if self.magnetActive then
+        self.magnetTimer = self.magnetTimer - dt
+        if self.magnetTimer <= 0 then self.magnetActive = false end
+
+        if not game.physicsActive then
+            self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
+            if self.magnetStepTimer >= 0.12 then
+                self.magnetStepTimer = 0
+                local head = self.body[1]
+                local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+                local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+
+                local function pullItem(item)
+                    if item and head then
+                        local dx = head.x - item.x
+                        local dy = head.y - item.y
+                        if math.abs(dx) > 0 or math.abs(dy) > 0 then
+                            local stepX = 0
+                            local stepY = 0
+                            if math.abs(dx) >= math.abs(dy) then
+                                stepX = (dx > 0) and 1 or -1
+                            else
+                                stepY = (dy > 0) and 1 or -1
+                            end
+                            local nx = math.max(1, math.min(cols, item.x + stepX))
+                            local ny = math.max(1, math.min(rows, item.y + stepY))
+                            if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                                item.x = nx
+                                item.y = ny
+                            end
+                        end
+                    end
+                end
+
+                pullItem(game.food)
+                pullItem(game.greenFruit)
+                pullItem(game.goldenFruit)
+                if self.inForbidden then
+                    for _, f in ipairs(game.forbiddenFoods or {}) do pullItem(f) end
+                end
             end
         end
     end
@@ -604,36 +618,54 @@ function FemaleSnake:update(dt, game)
 
             if hitBoxIndex then
                 local box = game.boxes[hitBoxIndex]
-                local pushTargetX = box.x + self.direction.x
-                local pushTargetY = box.y + self.direction.y
-                local isOutside = (pushTargetX < 1 or pushTargetX > cols or pushTargetY < 1 or pushTargetY > rows)
-
-                if isOutside then
-                    table.remove(game.boxes, hitBoxIndex)
-                    game:addScore(Config.boxScore or 100)
-                    if game.spawnBoxParticles then
-                        game:spawnBoxParticles(box.x, box.y)
-                    end
-                    Utils.playSFX("glitch", 1.4, 0.5)
-                    Utils.notify("Smash!", "Female snake smashed a box outside the arena! +100 pts", nil, 2.0)
+                if game.physicsActive then
+                    -- Zero-G Physics: Female kicks box without halting step
+                    box.vx = (box.vx or 0) + self.direction.x * 16.0
+                    box.vy = (box.vy or 0) + self.direction.y * 16.0
+                    box.rotVel = (box.rotVel or 0) + (math.random() - 0.5) * 12.0
+                    Utils.playSFX("tick", 0.9, 0.5)
                 else
-                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, nil, game.boxes)
-                    if free then
-                        box.x = pushTargetX
-                        box.y = pushTargetY
-                        Utils.playSFX("tick", 0.7, 0.4)
+                    local pushTargetX = box.x + self.direction.x
+                    local pushTargetY = box.y + self.direction.y
+                    local isOutside = (pushTargetX < 1 or pushTargetX > cols or pushTargetY < 1 or pushTargetY > rows)
+
+                    if isOutside then
+                        table.remove(game.boxes, hitBoxIndex)
+                        game:addScore(Config.boxScore or 100)
+                        if game.spawnBoxParticles then
+                            game:spawnBoxParticles(box.x, box.y)
+                        end
+                        Utils.playSFX("glitch", 1.4, 0.5)
+                        Utils.notify("Smash!", "Female snake smashed a box outside the arena! +100 pts", nil, 2.0)
                     else
-                        return
+                        local free = Utils.isEmptyCell(pushTargetX, pushTargetY, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, nil, game.boxes)
+                        if free then
+                            box.x = pushTargetX
+                            box.y = pushTargetY
+                            Utils.playSFX("tick", 0.7, 0.4)
+                        else
+                            return
+                        end
                     end
                 end
             end
 
             table.insert(self.body, 1, newHead)
 
-            -- Eat items
+            -- Eat items (supports zero-g float radius and grid cells)
+            local function checkFemaleItemHit(item)
+                if not item then return false end
+                if game.physicsActive and item.px and item.py then
+                    local dx = newHead.x - item.px
+                    local dy = newHead.y - item.py
+                    return (dx * dx + dy * dy) <= (0.75 * 0.75)
+                end
+                return newHead.x == item.x and newHead.y == item.y
+            end
+
             local ate = false
             if not self.inForbidden then
-                if game.food and newHead.x == game.food.x and newHead.y == game.food.y then
+                if game.food and checkFemaleItemHit(game.food) then
                     local pts = 10 * (self.lustActive and Config.lustMultiplier or 1)
                     game:addScore(pts)
                     game:updateBaseSpeed()
@@ -641,7 +673,7 @@ function FemaleSnake:update(dt, game)
                     game:spawnFood()
                     ate = true
                 end
-                if game.greenFruit and newHead.x == game.greenFruit.x and newHead.y == game.greenFruit.y then
+                if game.greenFruit and checkFemaleItemHit(game.greenFruit) then
                     local pts = 200 * (self.lustActive and Config.lustMultiplier or 1)
                     game:addScore(pts)
                     self.glow = true
@@ -654,12 +686,12 @@ function FemaleSnake:update(dt, game)
                     Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
                     ate = true
                 end
-                if game.powerUp and newHead.x == game.powerUp.x and newHead.y == game.powerUp.y then
+                if game.powerUp and checkFemaleItemHit(game.powerUp) then
                     self:applyPowerUp(game.powerUp, game)
                     game.powerUp = nil
                     ate = true
                 end
-                if game.goldenFruit and newHead.x == game.goldenFruit.x and newHead.y == game.goldenFruit.y then
+                if game.goldenFruit and checkFemaleItemHit(game.goldenFruit) then
                     self:applyGoldenFruit(game.goldenFruit, game)
                     game.goldenFruit = nil
                     game.goldenFruitTimer = 0
@@ -668,7 +700,7 @@ function FemaleSnake:update(dt, game)
             else
                 for i = #game.forbiddenFoods, 1, -1 do
                     local f = game.forbiddenFoods[i]
-                    if newHead.x == f.x and newHead.y == f.y then
+                    if checkFemaleItemHit(f) then
                         if f.type == 2 then
                             game.forbiddenTimer = math.min(game.forbiddenTimer + 2.5, 15.0)
                             self.forbiddenTimer = game.forbiddenTimer
