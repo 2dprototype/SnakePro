@@ -140,6 +140,13 @@ Codex.items = {
         points = "Spatial Teleport",
         desc = "Instantly teleports the entire snake to a random safe location on the grid, preserving body geometry."
     },
+    {
+        key = "gravityfruit",
+        name = "Gravity Fruit",
+        category = "Cosmic Power",
+        points = "Downward Pull (5s)",
+        desc = "Generates intense planetary downward gravity, steadily pulling all fruits, items, and crates toward the bottom of the grid."
+    },
 
     -- Social & Companion
     {
@@ -375,8 +382,6 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.circle("fill", x + size / 2, y + size / 2, size / 2 + 3)
         love.graphics.setColor(col[1], col[2], col[3])
         love.graphics.rectangle("fill", x + 2, y + 2, size - 4, size - 4, 4, 4)
-        love.graphics.setColor(1, 1, 1, 0.9)
-        love.graphics.rectangle("fill", x + size/2 - 2, y + size/2 - 2, 4, 4, 1, 1)
 
     elseif key == "speedfood" then
         -- Yellow Thunder Surge (Lightning Bolt)
@@ -390,7 +395,7 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.setColor(1.0, 0.85, 0.1)
         love.graphics.rectangle("line", x + 1, y + 1, size - 2, size - 2, 4, 4)
 
-        -- Lightning Bolt ⚡ shape
+        -- Lightning Bolt shape
         love.graphics.setColor(1.0, 0.95, 0.15)
         love.graphics.polygon("fill",
             cx + 1, y + 2,
@@ -528,6 +533,21 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.circle("fill", x + size / 2, y + size / 2, size / 2 - 2)
         love.graphics.setColor(1, 1, 1, 0.8)
         love.graphics.circle("fill", x + size * 0.4, y + size * 0.35, 2)
+
+    elseif key == "gravityfruit" then
+        -- Gravity Fruit (Heavy Downward Pull)
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local rad = size / 2
+        local col = Config.colors.gravityfruit or {0.6, 0.25, 0.85}
+        love.graphics.setColor(col[1], col[2], col[3], 0.35 + math.sin(time * 3) * 0.1)
+        love.graphics.circle("fill", cx, cy, rad + 3)
+        love.graphics.setColor(col[1], col[2], col[3])
+        love.graphics.circle("fill", cx, cy, rad - 1)
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.9)
+        love.graphics.line(cx - 3, cy - 1, cx, cy + 3)
+        love.graphics.line(cx + 3, cy - 1, cx, cy + 3)
+        love.graphics.line(cx, cy - 4, cx, cy + 3)
 
     elseif key == "forbidden" then
         -- Cosmic Purple Sigil

@@ -32,7 +32,8 @@ local DEBUG_SERIAL_MAP = {
     [22] = {name = "Chrono Shard", type = "forbidden_food", key = "forbidden_food_2", subtype = 2},
     [23] = {name = "Thunder Surge", type = "powerup", key = "speedfood", powerup = "speedfood"},
     [24] = {name = "Chronostasis (Stop)", type = "powerup", key = "stopfood", powerup = "stopfood"},
-    [25] = {name = "Wooden Crate", type = "box", key = "box"}
+    [25] = {name = "Wooden Crate", type = "box", key = "box"},
+    [26] = {name = "Gravity Fruit", type = "powerup", key = "gravityfruit", powerup = "gravityfruit"}
 }
 
 local SnakeGame = {}
@@ -104,6 +105,10 @@ function SnakeGame.new()
 
     self.blackholeActive = false
     self.blackholeTimer = 0
+
+    self.gravityActive = false
+    self.gravityTimer = 0
+    self.gravityStepTimer = 0
 
     self.noCollision = false
     self.noCollisionTimer = 0
@@ -243,6 +248,9 @@ function SnakeGame:reset()
     self.whiteholeTimer = 0
     self.blackholeActive = false
     self.blackholeTimer = 0
+    self.gravityActive = false
+    self.gravityTimer = 0
+    self.gravityStepTimer = 0
     self.noCollision = false
     self.noCollisionTimer = 0
     self.lustActive = false
@@ -609,8 +617,21 @@ function SnakeGame:getFreeOutsideCells(margin)
     return free
 end
 
+function SnakeGame:isSnakeOutside()
+    if not self.snake or #self.snake == 0 then return false end
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    for _, seg in ipairs(self.snake) do
+        if seg.x < 1 or seg.x > cols or seg.y < 1 or seg.y > rows then
+            return true
+        end
+    end
+    return false
+end
+
 function SnakeGame:spawnOutsideFood()
     if not self.fifthWallActive then return false end
+    if not self:isSnakeOutside() then return false end
     local maxOutside = Config.maxOutsideFoods or 3
     if self.outsideFoods and #self.outsideFoods >= maxOutside then return false end
     local free = self:getFreeOutsideCells()
@@ -624,6 +645,7 @@ end
 
 function SnakeGame:spawnOutsideBox()
     if not self.fifthWallActive then return false end
+    if not self:isSnakeOutside() then return false end
     local maxOutside = Config.maxOutsideBoxes or 2
     if self:getOutsideBoxCount() >= maxOutside then return false end
     local free = self:getFreeOutsideCells()
@@ -653,17 +675,19 @@ function SnakeGame:activateFifthWall()
         end
     end
 
-    local numFoods = Config.maxOutsideFoods or 3
-    for i = 1, numFoods do
-        self:spawnOutsideFood()
-    end
-    local numBoxes = Config.maxOutsideBoxes or 2
-    for i = 1, numBoxes do
-        self:spawnOutsideBox()
+    if self:isSnakeOutside() then
+        local numFoods = Config.maxOutsideFoods or 3
+        for i = 1, numFoods do
+            self:spawnOutsideFood()
+        end
+        local numBoxes = Config.maxOutsideBoxes or 2
+        for i = 1, numBoxes do
+            self:spawnOutsideBox()
+        end
     end
 
     Utils.playSFX("levelup", 1.0, 0.7)
-    Utils.notify("Snake", "5TH WALL BREAKOUT! Foods & Boxes spawned on your desktop!", nil, 3.0)
+    Utils.notify("Snake", "5TH WALL BREAKOUT! Slither outside to discover desktop items!", nil, 3.0)
 end
 
 -- ============================================================
@@ -1022,6 +1046,14 @@ function SnakeGame:applyPowerUp(powerUp)
 
     elseif ptype == "fifthwall" then
         self:activateFifthWall()
+
+    elseif ptype == "gravityfruit" then
+        self:addScore(50)
+        self.gravityActive = true
+        self.gravityTimer = Config.gravityFruitDuration or 5.0
+        self.gravityStepTimer = 0
+        Utils.playSFX("levelup", 1.4, 0.7)
+        Utils.notify("Snake", "GRAVITY FRUIT! Downward Gravitational Pull (5s)!", nil, 2.0)
     end
 end
 
@@ -1472,15 +1504,25 @@ function SnakeGame:update(dt)
             end
             self:destroyExternalWindows()
         else
-            self.outsideSpawnTimer = (self.outsideSpawnTimer or 0) + dt
-            if self.outsideSpawnTimer >= (Config.outsideSpawnInterval or 4.0) then
+            if self:isSnakeOutside() then
+                if self.outsideFoods and #self.outsideFoods == 0 then
+                    local numFoods = Config.maxOutsideFoods or 3
+                    for i = 1, numFoods do
+                        self:spawnOutsideFood()
+                    end
+                end
+                self.outsideSpawnTimer = (self.outsideSpawnTimer or 0) + dt
+                if self.outsideSpawnTimer >= (Config.outsideSpawnInterval or 4.0) then
+                    self.outsideSpawnTimer = 0
+                    if self.outsideFoods and #self.outsideFoods < (Config.maxOutsideFoods or 3) then
+                        self:spawnOutsideFood()
+                    end
+                    if self:getOutsideBoxCount() < (Config.maxOutsideBoxes or 2) then
+                        self:spawnOutsideBox()
+                    end
+                end
+            else
                 self.outsideSpawnTimer = 0
-                if self.outsideFoods and #self.outsideFoods < (Config.maxOutsideFoods or 3) then
-                    self:spawnOutsideFood()
-                end
-                if self:getOutsideBoxCount() < (Config.maxOutsideBoxes or 2) then
-                    self:spawnOutsideBox()
-                end
             end
         end
     end
@@ -1613,6 +1655,68 @@ function SnakeGame:update(dt)
             pullItem(self.goldenFruit)
             if self.inForbiddenRealm then
                 for _, f in ipairs(self.forbiddenFoods) do pullItem(f) end
+            end
+        end
+    end
+
+    -- Gravity Fruit physics (pulls everything downwards toward bottom, excluding player and female snake)
+    if self.gravityActive then
+        self.gravityTimer = self.gravityTimer - dt
+        if self.gravityTimer <= 0 then
+            self.gravityActive = false
+        end
+
+        self.gravityStepTimer = (self.gravityStepTimer or 0) + dt
+        if self.gravityStepTimer >= 0.14 then
+            self.gravityStepTimer = 0
+
+            local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+            local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+            local function moveItemDown(item)
+                if not item then return false end
+                local nx = item.x
+                local ny = item.y + 1
+                if ny <= rows then
+                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes) then
+                        item.y = ny
+                        return true
+                    end
+                end
+                return false
+            end
+
+            local movableItems = {}
+            if self.food then table.insert(movableItems, self.food) end
+            if self.powerUp then table.insert(movableItems, self.powerUp) end
+            if self.greenFruit then table.insert(movableItems, self.greenFruit) end
+            if self.goldenFruit then table.insert(movableItems, self.goldenFruit) end
+            if self.boxes then
+                for _, b in ipairs(self.boxes) do
+                    if b.y >= 1 and b.y <= rows and b.x >= 1 and b.x <= cols then
+                        table.insert(movableItems, b)
+                    end
+                end
+            end
+            if self.inForbiddenRealm and self.forbiddenFoods then
+                for _, f in ipairs(self.forbiddenFoods) do
+                    table.insert(movableItems, f)
+                end
+            end
+
+            table.sort(movableItems, function(a, b) return a.y > b.y end)
+
+            for _, item in ipairs(movableItems) do
+                moveItemDown(item)
+            end
+
+            if self.fifthWallActive and self.outsideFoods then
+                table.sort(self.outsideFoods, function(a, b) return a.y > b.y end)
+                for _, of in ipairs(self.outsideFoods) do
+                    if self:isOutsideCellFree(of.x, of.y + 1) then
+                        of.y = of.y + 1
+                    end
+                end
             end
         end
     end
@@ -2102,6 +2206,7 @@ function SnakeGame:draw(x, y, width, height)
     if self.magnetActive then statuses[#statuses+1] = {text = "MAGNET", color = {0.4, 0.6, 1.0}} end
     if self.whiteholeActive then statuses[#statuses+1] = {text = "WH", color = {1.0, 1.0, 1.0}} end
     if self.blackholeActive then statuses[#statuses+1] = {text = "BH", color = {0.4, 0.4, 0.4}} end
+    if self.gravityActive then statuses[#statuses+1] = {text = "GRAV", color = {0.7, 0.3, 0.95}} end
     if self.lustActive then statuses[#statuses+1] = {text = "LUST (3X)", color = {1.0, 0.2, 0.6}} end
     if self.invincible then statuses[#statuses+1] = {text = "SHIELD", color = {1.0, 0.85, 0.2}} end
     if self.inForbiddenRealm then statuses[#statuses+1] = {text = "REALM", color = {0.8, 0.3, 0.9}} end

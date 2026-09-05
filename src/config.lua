@@ -33,6 +33,7 @@ Config.forbiddenDuration = 8.0
 Config.speedFoodDuration = 5.0
 Config.speedFoodMultiplier = 1.8
 Config.stopDuration = 5.0
+Config.gravityFruitDuration = 5.0
 Config.boxSpawnInterval = 18.0
 Config.maxBoxes = 3
 Config.initialBoxes = 1
@@ -77,7 +78,8 @@ Config.powerUpTypes = {
     "fourthwall",
     "fifthwall",
     "speedfood",
-    "stopfood"
+    "stopfood",
+    "gravityfruit"
 }
 
 -- Color Palettes
@@ -111,6 +113,7 @@ Config.colors = {
     fifthwall   = {0.0, 1.0, 0.4},
     speedfood   = {1.0, 0.9, 0.1},
     stopfood    = {0.95, 0.25, 0.25},
+    gravityfruit = {0.6, 0.25, 0.85},
     box         = {0.68, 0.42, 0.22},
     boxBorder   = {0.38, 0.22, 0.08},
 

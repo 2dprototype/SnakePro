@@ -312,6 +312,11 @@ function FemaleSnake:applyPowerUp(powerUp, game)
     elseif ptype == "fifthwall" then
         game:activateFifthWall()
         Utils.notify("Snake", "Female triggered 5th Wall Breakout!", nil, 2.0)
+    elseif ptype == "gravityfruit" then
+        game.gravityActive = true
+        game.gravityTimer = Config.gravityFruitDuration or 5.0
+        game.gravityStepTimer = 0
+        Utils.notify("Snake", "Female Gravity Fruit! Downward Pull (5s)!", nil, 2.0)
     end
     Utils.playSFX("tick", 1.0, 0.3)
 end
