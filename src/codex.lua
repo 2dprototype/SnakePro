@@ -77,10 +77,24 @@ Codex.items = {
     },
     {
         key = "rainbow",
-        name = "Star Frenzy",
+        name = "Rainbow Prism",
+        category = "Cosmetic Power",
+        points = "Rainbow Visual (10s)",
+        desc = "Illuminates the snake in a dazzling ROYGBIV rainbow color-cycling spectrum for 10 seconds."
+    },
+    {
+        key = "speedfood",
+        name = "Thunder Surge",
         category = "Power Surge",
-        points = "Invincible & 2x pts",
-        desc = "Unleashes ROYGBIV rainbow spectrum aura, total invincibility, and 2x score multiplier for 6s."
+        points = "+50 pts & Speed (5s)",
+        desc = "Electrifies the snake with thunderous energy, granting a 1.8x lightning speed surge for 5 seconds."
+    },
+    {
+        key = "stopfood",
+        name = "Chronostasis (Stop)",
+        category = "Tactical Utility",
+        points = "Freeze (5s)",
+        desc = "Completely halts all movement of the snake that consumes it for 5 seconds."
     },
     {
         key = "magnet",
@@ -243,7 +257,7 @@ function Codex.drawIcon(key, x, y, size)
         -- Red Apple with leaf/stem
         local col = Config.colors.food
         love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", x + 2, y + 3, size - 4, size - 5, 3, 3)
+        love.graphics.rectangle("fill", x + 2, y + 3, size - 4, size - 5, 5,5)
         love.graphics.setColor(1.0, 0.4, 0.4, 0.6)
         love.graphics.rectangle("fill", x + 3, y + 4, 3, 3, 1, 1)
         love.graphics.setColor(0.3, 0.9, 0.2)
@@ -252,12 +266,15 @@ function Codex.drawIcon(key, x, y, size)
     elseif key == "greenfruit" then
         -- Lime Green Apple (Glow & Speed)
         local col = Config.colors.greenfruit
-        love.graphics.setColor(col[1], col[2], col[3], 0.25)
-        love.graphics.rectangle("fill", x - 3, y - 3, size + 6, size + 6, 5, 5)
+        local pulse = 0.35 + 0.15 * math.sin(time * 5)
+        love.graphics.setColor(col[1], col[2], col[3], pulse)
+        love.graphics.rectangle("fill", x - 3, y - 3, size + 6, size + 6, 6, 6)
         love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", x + 1, y + 1, size - 2, size - 2, 4, 4)
+        love.graphics.rectangle("fill", x + 1, y + 2, size - 2, size - 4, 5, 5)
         love.graphics.setColor(col[1] * 0.6, col[2] * 0.8, col[3] * 0.6)
-        love.graphics.rectangle("fill", x + 3, y + 3, size - 8, size - 8, 2, 2)
+        love.graphics.rectangle("fill", x + 3, y + 4, 4, 4, 2, 2)
+        love.graphics.setColor(col[1] * 0.6, col[2] * 0.8, col[3] * 0.6)
+        love.graphics.rectangle("fill", x + size / 2, y, 4, 3, 1, 1)
 
     elseif key == "goldenfruit" then
         -- Golden Apple Jackpot
@@ -329,16 +346,16 @@ function Codex.drawIcon(key, x, y, size)
     elseif key == "devilfruit" then
         -- Crimson Demonic Fruit
         local col = Config.colors.devilfruit
-        love.graphics.setColor(col[1], col[2], col[3], 0.35)
-        love.graphics.rectangle("fill", x - 2, y - 2, size + 4, size + 4, 4, 4)
+        local pulse = 0.35 + 0.15 * math.sin(time * 5)
+        love.graphics.setColor(col[1], col[2], col[3], pulse)
+        love.graphics.rectangle("fill", x - 3, y - 3, size + 6, size + 6, 6, 6)
         love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", x + 2, y + 2, size - 4, size - 4, 3, 3)
-        love.graphics.setColor(0.2, 0.05, 0.05)
-        love.graphics.circle("fill", x + size * 0.35, y + size * 0.4, 2)
-        love.graphics.circle("fill", x + size * 0.65, y + size * 0.4, 2)
-        love.graphics.setColor(1.0, 0.6, 0.1)
-        love.graphics.rectangle("fill", x + size/2 - 1, y, 2, 4)
-
+        love.graphics.rectangle("fill", x + 1, y + 2, size - 2, size - 4, 5, 5)
+        love.graphics.setColor(col[1] * 0.6, col[2] * 0.8, col[3] * 0.6)
+        love.graphics.rectangle("fill", x + 3, y + 4, 4, 4, 2, 2)
+        love.graphics.setColor(col[1] * 0.6, col[2] * 0.8, col[3] * 0.6)
+        love.graphics.rectangle("fill", x + size / 2, y, 4, 3, 1, 1)
+        
     elseif key == "rainbow" then
         -- ROYGBIV Rainbow Star Frenzy
         local rainbowColors = {
@@ -354,6 +371,55 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.setColor(1, 1, 1, 0.9)
         love.graphics.rectangle("fill", x + size/2 - 2, y + size/2 - 2, 4, 4, 1, 1)
 
+    elseif key == "speedfood" then
+        -- Yellow Thunder Surge (Lightning Bolt)
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local pulse = 0.35 + 0.15 * math.sin(time * 8)
+        love.graphics.setColor(1.0, 0.9, 0.1, pulse)
+        love.graphics.circle("fill", cx, cy, size / 2 + 3)
+        love.graphics.setColor(0.15, 0.12, 0.02, 0.85)
+        love.graphics.rectangle("fill", x + 1, y + 1, size - 2, size - 2, 4, 4)
+        love.graphics.setColor(1.0, 0.85, 0.1)
+        love.graphics.rectangle("line", x + 1, y + 1, size - 2, size - 2, 4, 4)
+
+        -- Lightning Bolt ⚡ shape
+        love.graphics.setColor(1.0, 0.95, 0.15)
+        love.graphics.polygon("fill",
+            cx + 1, y + 2,
+            cx - 5, cy + 1,
+            cx - 1, cy + 1,
+            cx - 3, y + size - 2,
+            cx + 5, cy - 1,
+            cx + 1, cy - 1
+        )
+        -- Core white highlight
+        love.graphics.setColor(1.0, 1.0, 0.8, 0.9)
+        love.graphics.polygon("fill",
+            cx + 1, y + 4,
+            cx - 3, cy,
+            cx, cy,
+            cx - 1, cy + 3,
+            cx + 3, cy - 1,
+            cx + 1, cy - 1
+        )
+
+    elseif key == "stopfood" then
+        -- Red / Crimson Stop Sign (Chronostasis Freeze)
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local pulse = 0.35 + 0.15 * math.sin(time * 5)
+        love.graphics.setColor(0.95, 0.25, 0.25, pulse)
+        love.graphics.circle("fill", cx, cy, size / 2 + 3)
+        love.graphics.setColor(0.85, 0.15, 0.2)
+        love.graphics.rectangle("fill", x + 2, y + 2, size - 4, size - 4, 4, 4)
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.95)
+        -- Dual pause/halt bars
+        local barW = math.max(2, math.floor(size * 0.18))
+        local barH = math.max(6, math.floor(size * 0.55))
+        love.graphics.rectangle("fill", cx - barW - 2, cy - barH / 2, barW, barH, 1, 1)
+        love.graphics.rectangle("fill", cx + 2, cy - barH / 2, barW, barH, 1, 1)
+
     elseif key == "magnet" then
         -- Cosmic Magnet (Horseshoe Vacuum)
         local cx = x + size / 2
@@ -363,8 +429,8 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.circle("fill", cx, cy, size / 2 + 3)
         love.graphics.setColor(0.2, 0.25, 0.4)
         love.graphics.circle("fill", cx, cy, size / 2 - 1)
-        love.graphics.setColor(0.4, 0.7, 1.0)
-        love.graphics.circle("line", cx, cy, size / 2 - 2)
+        -- love.graphics.setColor(0.4, 0.7, 1.0)
+        -- love.graphics.circle("line", cx, cy, size / 2 - 2)
         love.graphics.setColor(0.9, 0.3, 0.3)
         love.graphics.rectangle("fill", cx - 4, cy - 4, 3, 8)
         love.graphics.setColor(0.3, 0.5, 1.0)

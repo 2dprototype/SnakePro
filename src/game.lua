@@ -17,7 +17,7 @@ local DEBUG_SERIAL_MAP = {
     [7]  = {name = "Frost Hourglass", type = "powerup", key = "slowdown", powerup = "slowdown"},
     [8]  = {name = "Heart Core", type = "powerup", key = "extralife", powerup = "extralife"},
     [9]  = {name = "Devil's Fruit", type = "powerup", key = "devilfruit", powerup = "devilfruit"},
-    [10] = {name = "Star Frenzy", type = "powerup", key = "rainbow", powerup = "rainbow"},
+    [10] = {name = "Rainbow Prism", type = "powerup", key = "rainbow", powerup = "rainbow"},
     [11] = {name = "Cosmic Magnet", type = "powerup", key = "magnet", powerup = "magnet"},
     [12] = {name = "Prism Dye", type = "powerup", key = "colorchange", powerup = "colorchange"},
     [13] = {name = "Whitehole", type = "powerup", key = "whitehole", powerup = "whitehole"},
@@ -29,7 +29,9 @@ local DEBUG_SERIAL_MAP = {
     [19] = {name = "4th Wall Breach", type = "powerup", key = "fourthwall", powerup = "fourthwall"},
     [20] = {name = "5th Wall Breakout", type = "powerup", key = "fifthwall", powerup = "fifthwall"},
     [21] = {name = "Cosmic Shard", type = "forbidden_food", key = "forbidden_food_1", subtype = 1},
-    [22] = {name = "Chrono Shard", type = "forbidden_food", key = "forbidden_food_2", subtype = 2}
+    [22] = {name = "Chrono Shard", type = "forbidden_food", key = "forbidden_food_2", subtype = 2},
+    [23] = {name = "Thunder Surge", type = "powerup", key = "speedfood", powerup = "speedfood"},
+    [24] = {name = "Chronostasis (Stop)", type = "powerup", key = "stopfood", powerup = "stopfood"}
 }
 
 local SnakeGame = {}
@@ -55,6 +57,9 @@ function SnakeGame.new()
     self.speed = self.baseSpeed
     self.tempSpeedMultiplier = 1.0
     self.tempSpeedTimer = 0
+    self.stopTimer = 0
+    self.stopDuration = Config.stopDuration
+    self.storedNormalWorld = nil
     self.lives = Config.initialLives
     self.maxLives = Config.maxLives
 
@@ -207,6 +212,8 @@ function SnakeGame:reset()
     self.speed = self.baseSpeed
     self.tempSpeedMultiplier = 1.0
     self.tempSpeedTimer = 0
+    self.stopTimer = 0
+    self.storedNormalWorld = nil
     self.sessionTime = 0
     self.matchLogged = false
 
@@ -504,16 +511,62 @@ end
 
 function SnakeGame:enterForbiddenRealm()
     self:checkDiscovery("event_forbidden_realm")
+    if not self.inForbiddenRealm then
+        -- Snapshot all normal world foods and active power-ups
+        self.storedNormalWorld = {
+            food = self.food and {x = self.food.x, y = self.food.y} or nil,
+            powerUp = self.powerUp and {
+                x = self.powerUp.x,
+                y = self.powerUp.y,
+                type = self.powerUp.type,
+                timer = self.powerUpTimer or self.powerUp.timer or Config.powerUpDuration,
+                blink = self.powerUp.blink or 0
+            } or nil,
+            powerUpTimer = self.powerUpTimer,
+            powerUpSpawnTimer = self.powerUpSpawnTimer,
+            greenFruit = self.greenFruit and {
+                x = self.greenFruit.x,
+                y = self.greenFruit.y,
+                timer = self.greenFruitTimer or self.greenFruit.timer or Config.greenFruitDuration
+            } or nil,
+            greenFruitTimer = self.greenFruitTimer,
+            greenFruitSpawnTimer = self.greenFruitSpawnTimer,
+            goldenFruit = self.goldenFruit and {
+                x = self.goldenFruit.x,
+                y = self.goldenFruit.y,
+                timer = self.goldenFruitTimer or self.goldenFruit.timer or Config.goldenFruitDuration
+            } or nil,
+            goldenFruitTimer = self.goldenFruitTimer,
+            goldenFruitSpawnTimer = self.goldenFruitSpawnTimer
+        }
+
+        -- Clear normal world active items from the grid
+        self.food = nil
+        self.powerUp = nil
+        self.powerUpTimer = 0
+        self.greenFruit = nil
+        self.greenFruitTimer = 0
+        self.goldenFruit = nil
+        self.goldenFruitTimer = 0
+    end
+
     self.inForbiddenRealm = true
     self.forbiddenTimer = self.forbiddenDuration
     self.forbiddenFoods = {}
-    self.food = nil
-    self.powerUp = nil
-    self.greenFruit = nil
-    self.goldenFruit = nil
+    self.forbiddenPowerUps = {}
+
+    -- Synchronize female snake realm entry
+    if self.female and self.female.active then
+        self.female.inForbidden = true
+        self.female.forbiddenTimer = self.forbiddenDuration
+    end
+
     for i = 1, 14 do
         self:spawnForbiddenFood()
     end
+
+    Utils.playSFX("levelup", 1.0, 0.8)
+    Utils.notify("Forbidden Realm", "Shifted into Cosmic Realm! Normal foods preserved.", nil, 2.5)
 end
 
 function SnakeGame:exitForbiddenRealm()
@@ -527,7 +580,45 @@ function SnakeGame:exitForbiddenRealm()
     self.greenFruitTimer = 0
     self.goldenFruit = nil
     self.goldenFruitTimer = 0
-    self:spawnFood()
+
+    -- Synchronize female snake realm exit
+    if self.female and self.female.active then
+        self.female.inForbidden = false
+        self.female.forbiddenTimer = 0
+        if self.female.body and self.female.body[1] then
+            local fHead = self.female.body[1]
+            fHead.x = math.max(1, math.min(Config.cols, fHead.x))
+            fHead.y = math.max(1, math.min(Config.rows, fHead.y))
+        end
+    end
+
+    if self.snake and self.snake[1] then
+        local pHead = self.snake[1]
+        pHead.x = math.max(1, math.min(Config.cols, pHead.x))
+        pHead.y = math.max(1, math.min(Config.rows, pHead.y))
+    end
+
+    -- Restore stored normal world items & timers
+    if self.storedNormalWorld then
+        self.food = self.storedNormalWorld.food
+        self.powerUp = self.storedNormalWorld.powerUp
+        self.powerUpTimer = self.storedNormalWorld.powerUpTimer or (self.powerUp and self.powerUp.timer or 0)
+        self.powerUpSpawnTimer = self.storedNormalWorld.powerUpSpawnTimer or 0
+        self.greenFruit = self.storedNormalWorld.greenFruit
+        self.greenFruitTimer = self.storedNormalWorld.greenFruitTimer or (self.greenFruit and self.greenFruit.timer or 0)
+        self.greenFruitSpawnTimer = self.storedNormalWorld.greenFruitSpawnTimer or 0
+        self.goldenFruit = self.storedNormalWorld.goldenFruit
+        self.goldenFruitTimer = self.storedNormalWorld.goldenFruitTimer or (self.goldenFruit and self.goldenFruit.timer or 0)
+        self.goldenFruitSpawnTimer = self.storedNormalWorld.goldenFruitSpawnTimer or 0
+        self.storedNormalWorld = nil
+    end
+
+    if not self.food then
+        self:spawnFood()
+    end
+
+    Utils.playSFX("levelup", 0.9, 0.6)
+    Utils.notify("Normal World", "Returned from Forbidden Realm! Stored foods restored.", nil, 2.5)
 end
 
 function SnakeGame:triggerMating()
@@ -610,12 +701,23 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.notify("Snake", "DEVIL'S FRUIT! +100 pts & Crimson Surge", nil, 2.5)
 
     elseif ptype == "rainbow" then
+        self:addScore(50)
         self.rainbowActive = true
         self.rainbowTimer = Config.rainbowDuration
-        self.invincible = true
-        self.invincibleTimer = Config.rainbowDuration
         Utils.playSFX("levelup", 1.3, 0.6)
-        Utils.notify("Snake", "STAR FRENZY! Invincible + 2x Points (6s)!", nil, 2.5)
+        Utils.notify("Snake", "RAINBOW PRISM! Vibrant Spectrum (10s)!", nil, 2.5)
+
+    elseif ptype == "speedfood" then
+        self:addScore(50)
+        self.tempSpeedMultiplier = Config.speedFoodMultiplier
+        self.tempSpeedTimer = Config.speedFoodDuration
+        Utils.playSFX("levelup", 1.6, 0.7)
+        Utils.notify("Snake", "SPEED SURGE! Lightning Boost (5s)!", nil, 2.0)
+
+    elseif ptype == "stopfood" then
+        self.stopTimer = Config.stopDuration
+        Utils.playSFX("tick", 0.5, 0.8)
+        Utils.notify("Snake", "CHRONOSTASIS! Snake Frozen (5s)!", nil, 2.0)
 
     elseif ptype == "magnet" then
         self.magnetActive = true
@@ -682,7 +784,7 @@ end
 
 function SnakeGame:applyGoldenFruit(fruit)
     self:checkDiscovery("goldenfruit")
-    local mult = (self.lustActive and self.lustMultiplier or 1) * (self.rainbowActive and 2 or 1)
+    local mult = (self.lustActive and self.lustMultiplier or 1)
     local pts = 250 * mult
     self:addScore(pts)
 
@@ -1173,6 +1275,10 @@ function SnakeGame:update(dt)
         self.tempSpeedTimer = self.tempSpeedTimer - dt
         if self.tempSpeedTimer <= 0 then self.tempSpeedMultiplier = 1.0 end
     end
+    if self.stopTimer > 0 then
+        self.stopTimer = self.stopTimer - dt
+        if self.stopTimer < 0 then self.stopTimer = 0 end
+    end
 
     -- Realm Timers & Spawners
     if self.inForbiddenRealm then
@@ -1225,153 +1331,157 @@ function SnakeGame:update(dt)
     self.female:update(dt, self)
 
     -- Player Movement
-    self.timer = self.timer + dt
-    local currentSpeed = self.speed * (1 / self.tempSpeedMultiplier)
-
-    if self.timer >= currentSpeed then
+    if self.stopTimer > 0 then
         self.timer = 0
-        self.dir = {x = self.nextDir.x, y = self.nextDir.y}
+    else
+        self.timer = self.timer + dt
+        local currentSpeed = self.speed * (1 / self.tempSpeedMultiplier)
 
-        local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
-        local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+        if self.timer >= currentSpeed then
+            self.timer = 0
+            self.dir = {x = self.nextDir.x, y = self.nextDir.y}
 
-        local head = self.snake[1]
-        local newHead = {x = head.x + self.dir.x, y = head.y + self.dir.y}
+            local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+            local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
 
-        local outside = false
-        if not (self.fourthWallActive or self.fifthWallActive) then
-            if newHead.x < 1 then newHead.x = cols end
-            if newHead.x > cols then newHead.x = 1 end
-            if newHead.y < 1 then newHead.y = rows end
-            if newHead.y > rows then newHead.y = 1 end
-        else
-            if newHead.x < 1 or newHead.x > cols or newHead.y < 1 or newHead.y > rows then
-                outside = true
+            local head = self.snake[1]
+            local newHead = {x = head.x + self.dir.x, y = head.y + self.dir.y}
+
+            local outside = false
+            if not (self.fourthWallActive or self.fifthWallActive) then
+                if newHead.x < 1 then newHead.x = cols end
+                if newHead.x > cols then newHead.x = 1 end
+                if newHead.y < 1 then newHead.y = rows end
+                if newHead.y > rows then newHead.y = 1 end
             else
-                self.outsideTimer = 0
-            end
-        end
-
-        -- Collision: Tail (Immortal Ending) vs Body (Revive/Death)
-        if not self.noCollision and not self.invincible then
-            local hitTail = false
-            local hitBody = false
-
-            if #self.snake > 0 then
-                local tail = self.snake[#self.snake]
-                if newHead.x == tail.x and newHead.y == tail.y then
-                    hitTail = true
+                if newHead.x < 1 or newHead.x > cols or newHead.y < 1 or newHead.y > rows then
+                    outside = true
+                else
+                    self.outsideTimer = 0
                 end
             end
 
-            if not hitTail then
-                for i = 2, #self.snake - 1 do
-                    if self.snake[i].x == newHead.x and self.snake[i].y == newHead.y then
-                        hitBody = true
+            -- Collision: Tail (Immortal Ending) vs Body (Revive/Death)
+            if not self.noCollision and not self.invincible then
+                local hitTail = false
+                local hitBody = false
+
+                if #self.snake > 0 then
+                    local tail = self.snake[#self.snake]
+                    if newHead.x == tail.x and newHead.y == tail.y then
+                        hitTail = true
+                    end
+                end
+
+                if not hitTail then
+                    for i = 2, #self.snake - 1 do
+                        if self.snake[i].x == newHead.x and self.snake[i].y == newHead.y then
+                            hitBody = true
+                            break
+                        end
+                    end
+                end
+
+                if hitTail then
+                    self:startImmortalEnding()
+                    return
+                elseif hitBody then
+                    self:handleDeath()
+                    return
+                end
+            end
+
+            if self.fourthWallActive and not self.fifthWallActive and outside then
+                self.outsideTimer = self.outsideTimer + dt
+                if self.outsideTimer >= self.outsideMax then
+                    self.gameOver = true
+                    self.gameOverMessage = "Lost in the void"
+                    if not self.matchLogged then
+                        self.matchLogged = true
+                        Storage.addHistoryRecord({
+                            score = self.score,
+                            devilFruits = self.devilFruitEaten,
+                            matings = self.mateCount,
+                            duration = math.floor(self.sessionTime),
+                            foodsEaten = math.floor(self.score / 10),
+                            outcome = "Lost in Void"
+                        })
+                    end
+                    Utils.playSFX("glitch", 1.2, 0.4)
+                    return
+                end
+            end
+
+            table.insert(self.snake, 1, newHead)
+
+            local ate = false
+            local scoreMult = (self.lustActive and self.lustMultiplier or 1)
+
+            if not self.inForbiddenRealm then
+                if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
+                    self:checkDiscovery("food")
+                    local pts = 10 * scoreMult
+                    self:addScore(pts)
+                    self:updateBaseSpeed()
+                    Utils.playSFX("tick", 1.5, 0.5)
+                    self:spawnFood()
+                    ate = true
+                end
+                if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
+                    self:checkDiscovery("greenfruit")
+                    local pts = 200 * scoreMult
+                    self:addScore(pts)
+                    self.glowActive = true
+                    self.glowTimer = self.glowDuration
+                    self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.6
+                    self.tempSpeedTimer = 5.0
+                    Utils.playSFX("levelup", 1.8, 0.8)
+                    Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+                    self.greenFruit = nil
+                    self.greenFruitTimer = 0
+                    ate = true
+                end
+                if self.powerUp and newHead.x == self.powerUp.x and newHead.y == self.powerUp.y then
+                    self:applyPowerUp(self.powerUp)
+                    self.powerUp = nil
+                    ate = true
+                end
+                if self.goldenFruit and newHead.x == self.goldenFruit.x and newHead.y == self.goldenFruit.y then
+                    self:applyGoldenFruit(self.goldenFruit)
+                    self.goldenFruit = nil
+                    self.goldenFruitTimer = 0
+                    ate = true
+                end
+            else
+                for i = #self.forbiddenFoods, 1, -1 do
+                    local f = self.forbiddenFoods[i]
+                    if newHead.x == f.x and newHead.y == f.y then
+                        self:checkDiscovery("forbidden_food_" .. f.type)
+                        if f.type == 2 then
+                            self.forbiddenTimer = math.min(self.forbiddenTimer + 2.5, 15.0)
+                            Utils.playSFX("levelup", 1.2, 0.6)
+                            Utils.notify("Snake", "+2.5s Chrono Shard Harvested!", nil, 1.5)
+                        else
+                            local pts = 30 * scoreMult
+                            self:addScore(pts)
+                            Utils.playSFX("tick", 1.6, 0.5)
+                        end
+                        table.remove(self.forbiddenFoods, i)
+                        ate = true
                         break
                     end
                 end
             end
 
-            if hitTail then
-                self:startImmortalEnding()
-                return
-            elseif hitBody then
-                self:handleDeath()
-                return
+            if not ate then
+                table.remove(self.snake)
             end
-        end
 
-        if self.fourthWallActive and not self.fifthWallActive and outside then
-            self.outsideTimer = self.outsideTimer + dt
-            if self.outsideTimer >= self.outsideMax then
-                self.gameOver = true
-                self.gameOverMessage = "Lost in the void"
-                if not self.matchLogged then
-                    self.matchLogged = true
-                    Storage.addHistoryRecord({
-                        score = self.score,
-                        devilFruits = self.devilFruitEaten,
-                        matings = self.mateCount,
-                        duration = math.floor(self.sessionTime),
-                        foodsEaten = math.floor(self.score / 10),
-                        outcome = "Lost in Void"
-                    })
+            if self.female.active and self.female.body and self.female.body[1] then
+                local fHead = self.female.body[1]
+                if newHead.x == fHead.x and newHead.y == fHead.y and self.matingCooldown <= 0 then
+                    self:triggerMating()
                 end
-                Utils.playSFX("glitch", 1.2, 0.4)
-                return
-            end
-        end
-
-        table.insert(self.snake, 1, newHead)
-
-        local ate = false
-        local scoreMult = (self.lustActive and self.lustMultiplier or 1) * (self.rainbowActive and 2 or 1)
-
-        if not self.inForbiddenRealm then
-            if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
-                self:checkDiscovery("food")
-                local pts = 10 * scoreMult
-                self:addScore(pts)
-                self:updateBaseSpeed()
-                Utils.playSFX("tick", 1.5, 0.5)
-                self:spawnFood()
-                ate = true
-            end
-            if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
-                self:checkDiscovery("greenfruit")
-                local pts = 200 * scoreMult
-                self:addScore(pts)
-                self.glowActive = true
-                self.glowTimer = self.glowDuration
-                self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.6
-                self.tempSpeedTimer = 5.0
-                Utils.playSFX("levelup", 1.8, 0.8)
-                Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
-                self.greenFruit = nil
-                self.greenFruitTimer = 0
-                ate = true
-            end
-            if self.powerUp and newHead.x == self.powerUp.x and newHead.y == self.powerUp.y then
-                self:applyPowerUp(self.powerUp)
-                self.powerUp = nil
-                ate = true
-            end
-            if self.goldenFruit and newHead.x == self.goldenFruit.x and newHead.y == self.goldenFruit.y then
-                self:applyGoldenFruit(self.goldenFruit)
-                self.goldenFruit = nil
-                self.goldenFruitTimer = 0
-                ate = true
-            end
-        else
-            for i = #self.forbiddenFoods, 1, -1 do
-                local f = self.forbiddenFoods[i]
-                if newHead.x == f.x and newHead.y == f.y then
-                    self:checkDiscovery("forbidden_food_" .. f.type)
-                    if f.type == 2 then
-                        self.forbiddenTimer = math.min(self.forbiddenTimer + 2.5, 15.0)
-                        Utils.playSFX("levelup", 1.2, 0.6)
-                        Utils.notify("Snake", "+2.5s Chrono Shard Harvested!", nil, 1.5)
-                    else
-                        local pts = 30 * scoreMult
-                        self:addScore(pts)
-                        Utils.playSFX("tick", 1.6, 0.5)
-                    end
-                    table.remove(self.forbiddenFoods, i)
-                    ate = true
-                    break
-                end
-            end
-        end
-
-        if not ate then
-            table.remove(self.snake)
-        end
-
-        if self.female.active and self.female.body and self.female.body[1] then
-            local fHead = self.female.body[1]
-            if newHead.x == fHead.x and newHead.y == fHead.y and self.matingCooldown <= 0 then
-                self:triggerMating()
             end
         end
     end
@@ -1453,8 +1563,10 @@ function SnakeGame:draw(x, y, width, height)
 
     if self.noCollision then statuses[#statuses+1] = {text = "NC", color = {0.2, 0.9, 0.9}} end
     if self.tempSpeedMultiplier < 1.0 then statuses[#statuses+1] = {text = "FROST", color = {0.3, 0.7, 1.0}} end
+    if self.tempSpeedMultiplier > 1.0 and self.tempSpeedTimer > 0 then statuses[#statuses+1] = {text = "SPEED", color = {1.0, 0.9, 0.1}} end
+    if self.stopTimer > 0 then statuses[#statuses+1] = {text = string.format("STOP (%.0fs)", math.ceil(self.stopTimer)), color = {0.95, 0.3, 0.3}} end
     if self.glowActive then statuses[#statuses+1] = {text = "GLOW", color = {0.5, 1.0, 0.3}} end
-    if self.rainbowActive then statuses[#statuses+1] = {text = "FRENZY (2X)", color = {0.9, 0.2, 0.9}} end
+    if self.rainbowActive then statuses[#statuses+1] = {text = "RAINBOW", color = {0.9, 0.2, 0.9}} end
     if self.magnetActive then statuses[#statuses+1] = {text = "MAGNET", color = {0.4, 0.6, 1.0}} end
     if self.whiteholeActive then statuses[#statuses+1] = {text = "WH", color = {1.0, 1.0, 1.0}} end
     if self.blackholeActive then statuses[#statuses+1] = {text = "BH", color = {0.4, 0.4, 0.4}} end

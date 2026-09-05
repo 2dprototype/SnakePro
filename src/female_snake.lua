@@ -31,6 +31,16 @@ function FemaleSnake:reset()
     self.lustTimer = 0
     self.speedMultiplier = 1.0
     self.tempSpeedTimer = 0
+    self.stopTimer = 0
+    self.rainbowActive = false
+    self.rainbowTimer = 0
+    self.whiteholeActive = false
+    self.whiteholeTimer = 0
+    self.blackholeActive = false
+    self.blackholeTimer = 0
+    self.magnetActive = false
+    self.magnetTimer = 0
+    self.magnetStepTimer = 0
     self.inForbidden = false
     self.forbiddenTimer = 0
     self.glow = false
@@ -71,6 +81,16 @@ function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, fo
     self.lustTimer = 0
     self.speedMultiplier = 1.0
     self.tempSpeedTimer = 0
+    self.stopTimer = 0
+    self.rainbowActive = false
+    self.rainbowTimer = 0
+    self.whiteholeActive = false
+    self.whiteholeTimer = 0
+    self.blackholeActive = false
+    self.blackholeTimer = 0
+    self.magnetActive = false
+    self.magnetTimer = 0
+    self.magnetStepTimer = 0
     self.inForbidden = inForbidden or false
     self.forbiddenTimer = 0
     self.glow = false
@@ -150,7 +170,7 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
         table.insert(targets, 1, playerSnake[1])
         if goldenFruit then table.insert(targets, goldenFruit) end
         if greenFruit then table.insert(targets, greenFruit) end
-        if powerUp and powerUp.type == "lustfood" then table.insert(targets, powerUp) end
+        if powerUp and powerUp.type == "lustfood" then table.insert(targets, 1, powerUp) end
         if food then table.insert(targets, food) end
     else
         if not self.inForbidden then
@@ -185,6 +205,7 @@ function FemaleSnake:applyPowerUp(powerUp, game)
     local ptype = powerUp.type
     if ptype == "shorten" then
         for i = 1, 3 do if #self.body > 3 then table.remove(self.body) end end
+        Utils.notify("Snake", "Female Tail Cutter! -3 segments", nil, 1.8)
     elseif ptype == "reverse" then
         local reversed = {}
         for i = #self.body, 1, -1 do
@@ -193,11 +214,19 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.body = reversed
         self.direction = {x = -self.direction.x, y = -self.direction.y}
         self.nextDir = {x = self.direction.x, y = self.direction.y}
+        Utils.notify("Snake", "Female U-Turn Paradox!", nil, 1.8)
     elseif ptype == "slowdown" then
         self.speedMultiplier = 0.5
         self.tempSpeedTimer = Config.frostDuration
+        Utils.notify("Snake", "Female Frost Hourglass! (5s)", nil, 1.8)
     elseif ptype == "extralife" then
-        if self.lives < self.maxLives then self.lives = self.lives + 1 end
+        if self.lives < self.maxLives then
+            self.lives = self.lives + 1
+            Utils.notify("Snake", "Female Heart Core! +1 Life", nil, 1.8)
+        else
+            game:addScore(100)
+            Utils.notify("Snake", "Female Heart Core! +100 pts", nil, 1.8)
+        end
     elseif ptype == "colorchange" then
         self.devilPermanent = false
         self.color = Utils.getPrismColor(0)
@@ -208,12 +237,15 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.color = self.devilColor
         self.speedMultiplier = 1.4
         self.tempSpeedTimer = 3.0
+        Utils.notify("Snake", "Female ate Devil's Fruit! Crimson Surge!", nil, 2.0)
     elseif ptype == "lustfood" then
         self.lustActive = true
         self.lustTimer = Config.lustDuration
+        Utils.notify("Snake", "Female in Lust Mode! Seeking mate!", nil, 2.0)
     elseif ptype == "nocollision" then
         self.noCollision = true
         self.noCollisionTimer = Config.noCollisionDuration
+        Utils.notify("Snake", "Female Ghost Phase! (4s)", nil, 1.8)
     elseif ptype == "wormhole" then
         local cols = self.inForbidden and Config.forbiddenCols or Config.cols
         local rows = self.inForbidden and Config.forbiddenRows or Config.rows
@@ -232,27 +264,52 @@ function FemaleSnake:applyPowerUp(powerUp, game)
                 while seg.y > rows do seg.y = seg.y - rows end
             end
         end
+        Utils.notify("Snake", "Female Wormhole Teleport!", nil, 1.8)
     elseif ptype == "forbidden" then
-        if not self.inForbidden then
-            self.inForbidden = true
-            self.forbiddenTimer = Config.forbiddenDuration
-            local cols = Config.forbiddenCols
-            local rows = Config.forbiddenRows
-            self.body = {
-                {x = math.floor(cols/2), y = math.floor(rows/2)},
-                {x = math.floor(cols/2)-1, y = math.floor(rows/2)},
-                {x = math.floor(cols/2)-2, y = math.floor(rows/2)}
-            }
-            self.direction = {x = 1, y = 0}
-            self.nextDir = {x = 1, y = 0}
-        end
+        -- Takes BOTH player and female to forbidden realm!
+        game:enterForbiddenRealm()
+        Utils.notify("Snake", "Female opened Forbidden Portal! Both transported!", nil, 2.5)
     elseif ptype == "mate" then
         self.timer = math.min(self.timer + 30, 600)
         game:addScore(50)
-        Utils.notify("Snake", "Female time extended!", nil, 2.0)
+        Utils.notify("Snake", "Female time extended! +30s", nil, 2.0)
     elseif ptype == "rainbow" then
-        self.invincible = true
-        self.invincibleTimer = Config.rainbowDuration
+        self.rainbowActive = true
+        self.rainbowTimer = Config.rainbowDuration
+        Utils.notify("Snake", "Female glowing with Rainbow Prism (10s)!", nil, 2.0)
+    elseif ptype == "speedfood" then
+        game:addScore(50)
+        self.speedMultiplier = Config.speedFoodMultiplier
+        self.tempSpeedTimer = Config.speedFoodDuration
+        Utils.notify("Snake", "Female Lightning Speed Boost (5s)!", nil, 2.0)
+    elseif ptype == "stopfood" then
+        self.stopTimer = Config.stopDuration
+        Utils.notify("Snake", "Female Frozen for 5s!", nil, 2.0)
+    elseif ptype == "whitehole" then
+        self.whiteholeActive = true
+        self.whiteholeTimer = Config.holeEffectDuration
+        Utils.notify("Snake", "Female Whitehole Repulsion (5s)!", nil, 2.0)
+    elseif ptype == "blackhole" then
+        self.blackholeActive = true
+        self.blackholeTimer = Config.holeEffectDuration
+        Utils.notify("Snake", "Female Blackhole Attraction (5s)!", nil, 2.0)
+    elseif ptype == "magnet" then
+        self.magnetActive = true
+        self.magnetTimer = Config.magnetDuration
+        self.magnetStepTimer = 0
+        Utils.notify("Snake", "Female Cosmic Magnet (6s)!", nil, 2.0)
+    elseif ptype == "fourthwall" then
+        game:checkDiscovery("event_fourth_wall")
+        game.fourthWallActive = true
+        game.fourthWallTimer = Config.fourthWallDuration
+        game.outsideTimer = 0
+        Utils.notify("Snake", "Female triggered 4th Wall Breach!", nil, 2.0)
+    elseif ptype == "fifthwall" then
+        game:checkDiscovery("event_fifth_wall")
+        game.fifthWallActive = true
+        game.fifthWallTimer = Config.fifthWallDuration
+        game.outsideTimer = 0
+        Utils.notify("Snake", "Female triggered 5th Wall Breakout!", nil, 2.0)
     end
     Utils.playSFX("tick", 1.0, 0.3)
 end
@@ -295,6 +352,14 @@ function FemaleSnake:update(dt, game)
         self.tempSpeedTimer = self.tempSpeedTimer - dt
         if self.tempSpeedTimer <= 0 then self.speedMultiplier = 1.0 end
     end
+    if self.stopTimer > 0 then
+        self.stopTimer = self.stopTimer - dt
+        if self.stopTimer < 0 then self.stopTimer = 0 end
+    end
+    if self.rainbowActive then
+        self.rainbowTimer = self.rainbowTimer - dt
+        if self.rainbowTimer <= 0 then self.rainbowActive = false end
+    end
     if self.glow then
         self.glowTimer = self.glowTimer - dt
         if self.glowTimer <= 0 then self.glow = false end
@@ -309,143 +374,274 @@ function FemaleSnake:update(dt, game)
         end
     end
 
-    local currentSpeed = Config.baseSpeed * (1 / self.speedMultiplier)
-    self.moveTimer = self.moveTimer + dt
-    if self.moveTimer >= currentSpeed then
-        self.moveTimer = 0
+    -- Female Whitehole Physics
+    if self.whiteholeActive then
+        self.whiteholeTimer = self.whiteholeTimer - dt
+        if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
 
+        local head = self.body[1]
         local cols = self.inForbidden and Config.forbiddenCols or Config.cols
         local rows = self.inForbidden and Config.forbiddenRows or Config.rows
 
-        local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods)
-        if dir then
-            self.nextDir = dir
-        else
-            local possible = {}
-            local rev = {x = -self.direction.x, y = -self.direction.y}
-            for _, d in ipairs({{0, -1}, {0, 1}, {-1, 0}, {1, 0}}) do
-                if not (d[1] == rev.x and d[2] == rev.y) then
-                    local nx = self.body[1].x + d[1]
-                    local ny = self.body[1].y + d[2]
-                    local blocked = (nx < 1 or nx > cols or ny < 1 or ny > rows)
-                    if not blocked then
-                        for i = 1, #self.body - 1 do
-                            if self.body[i].x == nx and self.body[i].y == ny then
-                                blocked = true; break
-                            end
+        local function repelItem(item)
+            if item and head then
+                local dx = item.x - head.x
+                local dy = item.y - head.y
+                local dist = math.abs(dx) + math.abs(dy)
+                if dist > 1 then
+                    local nx = item.x
+                    local ny = item.y
+                    if math.abs(dx) >= math.abs(dy) then
+                        nx = item.x + (dx > 0 and 1 or -1)
+                    else
+                        ny = item.y + (dy > 0 and 1 or -1)
+                    end
+                    nx = math.max(1, math.min(cols, nx))
+                    ny = math.max(1, math.min(rows, ny))
+                    if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                        item.x = nx
+                        item.y = ny
+                    end
+                end
+            end
+        end
+
+        repelItem(game.food)
+        repelItem(game.powerUp)
+        repelItem(game.greenFruit)
+        repelItem(game.goldenFruit)
+        if self.inForbidden then
+            for _, f in ipairs(game.forbiddenFoods or {}) do repelItem(f) end
+        end
+    end
+
+    -- Female Blackhole Physics
+    if self.blackholeActive then
+        self.blackholeTimer = self.blackholeTimer - dt
+        if self.blackholeTimer <= 0 then self.blackholeActive = false end
+
+        local head = self.body[1]
+        local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+        local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+
+        local function attractItem(item)
+            if item and head then
+                local dx = head.x - item.x
+                local dy = head.y - item.y
+                local dist = math.abs(dx) + math.abs(dy)
+                if dist > 1 then
+                    local nx = item.x
+                    local ny = item.y
+                    if math.abs(dx) >= math.abs(dy) then
+                        nx = item.x + (dx > 0 and 1 or -1)
+                    else
+                        ny = item.y + (dy > 0 and 1 or -1)
+                    end
+                    nx = math.max(1, math.min(cols, nx))
+                    ny = math.max(1, math.min(rows, ny))
+                    if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                        item.x = nx
+                        item.y = ny
+                    end
+                end
+            end
+        end
+
+        attractItem(game.food)
+        attractItem(game.powerUp)
+        attractItem(game.greenFruit)
+        attractItem(game.goldenFruit)
+        if self.inForbidden then
+            for _, f in ipairs(game.forbiddenFoods or {}) do attractItem(f) end
+        end
+    end
+
+    -- Female Cosmic Magnet Physics
+    if self.magnetActive then
+        self.magnetTimer = self.magnetTimer - dt
+        if self.magnetTimer <= 0 then self.magnetActive = false end
+
+        self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
+        if self.magnetStepTimer >= 0.12 then
+            self.magnetStepTimer = 0
+            local head = self.body[1]
+            local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+            local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+
+            local function pullItem(item)
+                if item and head then
+                    local dx = head.x - item.x
+                    local dy = head.y - item.y
+                    if math.abs(dx) > 0 or math.abs(dy) > 0 then
+                        local stepX = 0
+                        local stepY = 0
+                        if math.abs(dx) >= math.abs(dy) then
+                            stepX = (dx > 0) and 1 or -1
+                        else
+                            stepY = (dy > 0) and 1 or -1
+                        end
+                        local nx = math.max(1, math.min(cols, item.x + stepX))
+                        local ny = math.max(1, math.min(rows, item.y + stepY))
+                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                            item.x = nx
+                            item.y = ny
                         end
                     end
-                    if not blocked then
-                        table.insert(possible, {x = d[1], y = d[2]})
-                    end
                 end
             end
-            if #possible > 0 then
-                self.nextDir = possible[math.random(1, #possible)]
+
+            pullItem(game.food)
+            pullItem(game.greenFruit)
+            pullItem(game.goldenFruit)
+            if self.inForbidden then
+                for _, f in ipairs(game.forbiddenFoods or {}) do pullItem(f) end
+            end
+        end
+    end
+
+    -- Female Movement
+    if self.stopTimer > 0 then
+        self.moveTimer = 0
+    else
+        local currentSpeed = Config.baseSpeed * (1 / self.speedMultiplier)
+        self.moveTimer = self.moveTimer + dt
+        if self.moveTimer >= currentSpeed then
+            self.moveTimer = 0
+
+            local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+            local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+
+            local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods)
+            if dir then
+                self.nextDir = dir
             else
-                self.nextDir = {x = -self.direction.x, y = -self.direction.y}
+                local possible = {}
+                local rev = {x = -self.direction.x, y = -self.direction.y}
+                for _, d in ipairs({{0, -1}, {0, 1}, {-1, 0}, {1, 0}}) do
+                    if not (d[1] == rev.x and d[2] == rev.y) then
+                        local nx = self.body[1].x + d[1]
+                        local ny = self.body[1].y + d[2]
+                        local blocked = (nx < 1 or nx > cols or ny < 1 or ny > rows)
+                        if not blocked then
+                            for i = 1, #self.body - 1 do
+                                if self.body[i].x == nx and self.body[i].y == ny then
+                                    blocked = true; break
+                                end
+                            end
+                        end
+                        if not blocked then
+                            table.insert(possible, {x = d[1], y = d[2]})
+                        end
+                    end
+                end
+                if #possible > 0 then
+                    self.nextDir = possible[math.random(1, #possible)]
+                else
+                    self.nextDir = {x = -self.direction.x, y = -self.direction.y}
+                end
             end
-        end
 
-        self.direction = {x = self.nextDir.x, y = self.nextDir.y}
-        local head = self.body[1]
-        local newHead = {x = head.x + self.direction.x, y = head.y + self.direction.y}
+            self.direction = {x = self.nextDir.x, y = self.nextDir.y}
+            local head = self.body[1]
+            local newHead = {x = head.x + self.direction.x, y = head.y + self.direction.y}
 
-        if newHead.x < 1 then newHead.x = cols end
-        if newHead.x > cols then newHead.x = 1 end
-        if newHead.y < 1 then newHead.y = rows end
-        if newHead.y > rows then newHead.y = 1 end
+            if newHead.x < 1 then newHead.x = cols end
+            if newHead.x > cols then newHead.x = 1 end
+            if newHead.y < 1 then newHead.y = rows end
+            if newHead.y > rows then newHead.y = 1 end
 
-        -- Self-collision
-        if not self.noCollision and not self.invincible then
-            for i = 1, #self.body - 1 do
-                if self.body[i].x == newHead.x and self.body[i].y == newHead.y then
-                    self.lives = self.lives - 1
-                    if self.lives <= 0 then
-                        self.active = false
-                        self.body = nil
-                        Utils.notify("Snake", "Female snake died!", nil, 3.0)
+            -- Self-collision
+            if not self.noCollision and not self.invincible then
+                for i = 1, #self.body - 1 do
+                    if self.body[i].x == newHead.x and self.body[i].y == newHead.y then
+                        self.lives = self.lives - 1
+                        if self.lives <= 0 then
+                            self.active = false
+                            self.body = nil
+                            Utils.notify("Snake", "Female snake died!", nil, 3.0)
+                            return
+                        else
+                            self.invincible = true
+                            self.invincibleTimer = Config.invincibleDuration
+                            while #self.body > 3 do table.remove(self.body) end
+                            self.direction = {x = 1, y = 0}
+                            self.nextDir = {x = 1, y = 0}
+                            self.devilPermanent = false
+                            self.color = {Config.colors.femaleColor[1], Config.colors.femaleColor[2], Config.colors.femaleColor[3]}
+                        end
                         return
-                    else
-                        self.invincible = true
-                        self.invincibleTimer = Config.invincibleDuration
-                        while #self.body > 3 do table.remove(self.body) end
-                        self.direction = {x = 1, y = 0}
-                        self.nextDir = {x = 1, y = 0}
-                        self.devilPermanent = false
-                        self.color = {Config.colors.femaleColor[1], Config.colors.femaleColor[2], Config.colors.femaleColor[3]}
                     end
-                    return
                 end
             end
-        end
 
-        table.insert(self.body, 1, newHead)
+            table.insert(self.body, 1, newHead)
 
-        -- Eat items
-        local ate = false
-        if not self.inForbidden then
-            if game.food and newHead.x == game.food.x and newHead.y == game.food.y then
-                local pts = 10 * (self.lustActive and Config.lustMultiplier or 1)
-                game:addScore(pts)
-                game:updateBaseSpeed()
-                Utils.playSFX("tick", 1.5, 0.5)
-                game:spawnFood()
-                ate = true
-            end
-            if game.greenFruit and newHead.x == game.greenFruit.x and newHead.y == game.greenFruit.y then
-                local pts = 200 * (self.lustActive and Config.lustMultiplier or 1)
-                game:addScore(pts)
-                self.glow = true
-                self.glowTimer = Config.glowDuration
-                self.speedMultiplier = self.speedMultiplier + 0.6
-                self.tempSpeedTimer = Config.glowDuration
-                game.greenFruit = nil
-                game.greenFruitTimer = 0
-                Utils.playSFX("levelup", 1.8, 0.8)
-                Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
-                ate = true
-            end
-            if game.powerUp and newHead.x == game.powerUp.x and newHead.y == game.powerUp.y then
-                self:applyPowerUp(game.powerUp, game)
-                game.powerUp = nil
-                ate = true
-            end
-            if game.goldenFruit and newHead.x == game.goldenFruit.x and newHead.y == game.goldenFruit.y then
-                self:applyGoldenFruit(game.goldenFruit, game)
-                game.goldenFruit = nil
-                game.goldenFruitTimer = 0
-                ate = true
-            end
-        else
-            for i = #game.forbiddenFoods, 1, -1 do
-                local f = game.forbiddenFoods[i]
-                if newHead.x == f.x and newHead.y == f.y then
-                    if f.type == 2 then
-                        game.forbiddenTimer = math.min(game.forbiddenTimer + 2.5, 15.0)
-                        Utils.playSFX("levelup", 1.2, 0.6)
-                        Utils.notify("Snake", "+2.5s in Forbidden Realm!", nil, 1.5)
-                    else
-                        local pts = 30 * (self.lustActive and Config.lustMultiplier or 1)
-                        game:addScore(pts)
-                        Utils.playSFX("tick", 1.6, 0.5)
-                    end
-                    table.remove(game.forbiddenFoods, i)
+            -- Eat items
+            local ate = false
+            if not self.inForbidden then
+                if game.food and newHead.x == game.food.x and newHead.y == game.food.y then
+                    local pts = 10 * (self.lustActive and Config.lustMultiplier or 1)
+                    game:addScore(pts)
+                    game:updateBaseSpeed()
+                    Utils.playSFX("tick", 1.5, 0.5)
+                    game:spawnFood()
                     ate = true
-                    break
+                end
+                if game.greenFruit and newHead.x == game.greenFruit.x and newHead.y == game.greenFruit.y then
+                    local pts = 200 * (self.lustActive and Config.lustMultiplier or 1)
+                    game:addScore(pts)
+                    self.glow = true
+                    self.glowTimer = Config.glowDuration
+                    self.speedMultiplier = self.speedMultiplier + 0.6
+                    self.tempSpeedTimer = Config.glowDuration
+                    game.greenFruit = nil
+                    game.greenFruitTimer = 0
+                    Utils.playSFX("levelup", 1.8, 0.8)
+                    Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+                    ate = true
+                end
+                if game.powerUp and newHead.x == game.powerUp.x and newHead.y == game.powerUp.y then
+                    self:applyPowerUp(game.powerUp, game)
+                    game.powerUp = nil
+                    ate = true
+                end
+                if game.goldenFruit and newHead.x == game.goldenFruit.x and newHead.y == game.goldenFruit.y then
+                    self:applyGoldenFruit(game.goldenFruit, game)
+                    game.goldenFruit = nil
+                    game.goldenFruitTimer = 0
+                    ate = true
+                end
+            else
+                for i = #game.forbiddenFoods, 1, -1 do
+                    local f = game.forbiddenFoods[i]
+                    if newHead.x == f.x and newHead.y == f.y then
+                        if f.type == 2 then
+                            game.forbiddenTimer = math.min(game.forbiddenTimer + 2.5, 15.0)
+                            self.forbiddenTimer = game.forbiddenTimer
+                            Utils.playSFX("levelup", 1.2, 0.6)
+                            Utils.notify("Snake", "+2.5s in Forbidden Realm!", nil, 1.5)
+                        else
+                            local pts = 30 * (self.lustActive and Config.lustMultiplier or 1)
+                            game:addScore(pts)
+                            Utils.playSFX("tick", 1.6, 0.5)
+                        end
+                        table.remove(game.forbiddenFoods, i)
+                        ate = true
+                        break
+                    end
                 end
             end
-        end
 
-        if not ate then
-            table.remove(self.body)
-        end
+            if not ate then
+                table.remove(self.body)
+            end
 
-        -- Mating check with player
-        if self.active and not game.gameOver and game.snake and game.snake[1] then
-            local pHead = game.snake[1]
-            if pHead.x == newHead.x and pHead.y == newHead.y and game.matingCooldown <= 0 then
-                game:triggerMating()
+            -- Mating check with player
+            if self.active and not game.gameOver and game.snake and game.snake[1] then
+                local pHead = game.snake[1]
+                if pHead.x == newHead.x and pHead.y == newHead.y and game.matingCooldown <= 0 then
+                    game:triggerMating()
+                end
             end
         end
     end
@@ -467,15 +663,21 @@ function FemaleSnake:draw(boardX, boardY, gridSize, scale, blinkVisible)
                 love.graphics.rectangle("fill", sx - 2, sy - 2, size + 4, size + 4, 6, 6)
             end
 
+            local drawColor = self.color
+            if self.devilPermanent then
+                drawColor = self.devilColor
+            end
+
+            if self.rainbowActive then
+                local hue = (i - 1) / #self.body
+                local r, g, b = Utils.hsvToRgb(hue, 1.0, 1.0)
+                drawColor = {r, g, b}
+            end
+
             if i == 1 then
-                if self.devilPermanent then
-                    love.graphics.setColor(self.devilColor)
-                else
-                    love.graphics.setColor(self.color)
-                end
+                love.graphics.setColor(drawColor[1], drawColor[2], drawColor[3])
             else
-                local bodyCol = self.devilPermanent and self.devilColor or self.color
-                love.graphics.setColor(bodyCol[1] * 0.7, bodyCol[2] * 0.7, bodyCol[3] * 0.7)
+                love.graphics.setColor(drawColor[1] * 0.75, drawColor[2] * 0.75, drawColor[3] * 0.75)
             end
 
             love.graphics.rectangle("fill", sx + 1, sy + 1, size - 2, size - 2, 3, 3)

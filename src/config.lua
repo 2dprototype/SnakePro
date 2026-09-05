@@ -20,7 +20,7 @@ Config.maxLives = 5
 Config.invincibleDuration = 2.0
 Config.noCollisionDuration = 4.0
 Config.glowDuration = 5.0
-Config.rainbowDuration = 6.0
+Config.rainbowDuration = 10.0
 Config.frostDuration = 5.0
 Config.magnetDuration = 6.0
 Config.lustDuration = 5.0
@@ -30,6 +30,9 @@ Config.fourthWallDuration = 15.0
 Config.fourthWallMaxOutside = 5.0
 Config.fifthWallDuration = 15.0
 Config.forbiddenDuration = 8.0
+Config.speedFoodDuration = 5.0
+Config.speedFoodMultiplier = 1.8
+Config.stopDuration = 5.0
 
 -- Spawning Intervals & Durations
 Config.powerUpSpawnInterval = 7.0
@@ -63,7 +66,9 @@ Config.powerUpTypes = {
     "lustfood",
     "forbidden",
     "fourthwall",
-    "fifthwall"
+    "fifthwall",
+    "speedfood",
+    "stopfood"
 }
 
 -- Color Palettes
@@ -95,6 +100,8 @@ Config.colors = {
     forbidden   = {0.6, 0.1, 0.8},
     fourthwall  = {0.0, 0.8, 0.8},
     fifthwall   = {0.0, 1.0, 0.4},
+    speedfood   = {1.0, 0.9, 0.1},
+    stopfood    = {0.95, 0.25, 0.25},
 
     -- Snake Defaults
     snakeHead   = {0.6, 0.95, 0.3},
