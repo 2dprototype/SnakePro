@@ -310,10 +310,7 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         game.outsideTimer = 0
         Utils.notify("Snake", "Female triggered 4th Wall Breach!", nil, 2.0)
     elseif ptype == "fifthwall" then
-        game:checkDiscovery("event_fifth_wall")
-        game.fifthWallActive = true
-        game.fifthWallTimer = Config.fifthWallDuration
-        game.outsideTimer = 0
+        game:activateFifthWall()
         Utils.notify("Snake", "Female triggered 5th Wall Breakout!", nil, 2.0)
     end
     Utils.playSFX("tick", 1.0, 0.3)
@@ -371,11 +368,14 @@ function FemaleSnake:update(dt, game)
     end
     if self.inForbidden then
         self.forbiddenTimer = self.forbiddenTimer - dt
-        if self.forbiddenTimer <= 0 then
+        if self.forbiddenTimer <= 0 or not game.inForbiddenRealm then
             self.inForbidden = false
-            local head = self.body[1]
-            head.x = math.min(head.x, Config.cols)
-            head.y = math.min(head.y, Config.rows)
+            self.forbiddenTimer = 0
+            if self.body and self.body[1] then
+                local head = self.body[1]
+                head.x = math.max(1, math.min(Config.cols, head.x))
+                head.y = math.max(1, math.min(Config.rows, head.y))
+            end
         end
     end
 

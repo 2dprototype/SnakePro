@@ -137,11 +137,14 @@ function SnakeGame.new()
     self.fifthWallTimer = 0
     self.fifthWallDuration = Config.fifthWallDuration
     self.externalWindows = {}
+    self.outsideFoods = {}
+    self.outsideSpawnTimer = 0
 
     -- Forbidden Realm
     self.inForbiddenRealm = false
     self.forbiddenTimer = 0
     self.forbiddenDuration = Config.forbiddenDuration
+    self.forbiddenFoodDuration = Config.forbiddenFoodDuration or 5.0
     self.forbiddenFoods = {}
     self.forbiddenPowerUps = {}
 
@@ -247,6 +250,7 @@ function SnakeGame:reset()
     self.devilFruitEaten = 0
     self.devilPermanent = false
 
+    self.storedNormalWorld = nil
     self.inForbiddenRealm = false
     self.forbiddenTimer = 0
     self.forbiddenFoods = {}
@@ -263,6 +267,8 @@ function SnakeGame:reset()
 
     self.fifthWallActive = false
     self.fifthWallTimer = 0
+    self.outsideFoods = {}
+    self.outsideSpawnTimer = 0
     self:destroyExternalWindows()
 
     self.greenFruit = nil
@@ -380,8 +386,36 @@ function SnakeGame:getFreeCells()
     return Utils.findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.female.body, self.boxes)
 end
 
+function SnakeGame:getInsideBoxCount()
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    local count = 0
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do
+            if b.x >= 1 and b.x <= cols and b.y >= 1 and b.y <= rows then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
+function SnakeGame:getOutsideBoxCount()
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    local count = 0
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do
+            if b.x < 1 or b.x > cols or b.y < 1 or b.y > rows then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
 function SnakeGame:spawnBox()
-    if #self.boxes >= (Config.maxBoxes or 3) then return false end
+    if self:getInsideBoxCount() >= (Config.maxBoxes or 3) then return false end
     local free = self:getFreeCells()
     if #free > 0 then
         local pos = free[math.random(1, #free)]
@@ -475,8 +509,161 @@ function SnakeGame:spawnForbiddenFood()
         local pos = free[math.random(1, #free)]
         -- 70% Cosmic Shard (+30 pts), 30% Chrono Shard (+2.5s)
         local ftype = (math.random() < 0.7) and 1 or 2
-        table.insert(self.forbiddenFoods, {x = pos.x, y = pos.y, type = ftype})
+        local dur = self.forbiddenFoodDuration or Config.forbiddenFoodDuration or 5.0
+        table.insert(self.forbiddenFoods, {
+            x = pos.x,
+            y = pos.y,
+            type = ftype,
+            timer = dur,
+            maxTimer = dur,
+            blink = 0
+        })
     end
+end
+
+function SnakeGame:isOutsideCellFree(cx, cy)
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    if cx >= 1 and cx <= cols and cy >= 1 and cy <= rows then
+        return false
+    end
+
+    local mainWinX, mainWinY = 0, 0
+    if love.window and love.window.getPosition then
+        mainWinX, mainWinY = love.window.getPosition()
+    end
+    local boardX, boardY, _, _, scale = self:getBoardGeometry()
+    local size = self.gridSize * scale
+    local absX = mainWinX + boardX + (cx - 1) * size
+    local absY = mainWinY + boardY + (cy - 1) * size
+    local dw, dh = 1920, 1080
+    if love.window and love.window.getDesktopDimensions then
+        local w, h = love.window.getDesktopDimensions(1)
+        if w and h and w > 0 and h > 0 then dw, dh = w, h end
+    end
+    if absX < 0 or absX + size > dw or absY < 0 or absY + size > dh then
+        return false
+    end
+
+    if self.snake then
+        for _, seg in ipairs(self.snake) do
+            if seg.x == cx and seg.y == cy then return false end
+        end
+    end
+    if self.female and self.female.body then
+        for _, seg in ipairs(self.female.body) do
+            if seg.x == cx and seg.y == cy then return false end
+        end
+    end
+    if self.outsideFoods then
+        for _, f in ipairs(self.outsideFoods) do
+            if f.x == cx and f.y == cy then return false end
+        end
+    end
+    if self.boxes then
+        for _, b in ipairs(self.boxes) do
+            if b.x == cx and b.y == cy then return false end
+        end
+    end
+
+    return true
+end
+
+function SnakeGame:getFreeOutsideCells(margin)
+    margin = margin or Config.outsideMargin or 8
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+
+    local mainWinX, mainWinY = 0, 0
+    if love.window and love.window.getPosition then
+        mainWinX, mainWinY = love.window.getPosition()
+    end
+    local boardX, boardY, _, _, scale = self:getBoardGeometry()
+    local size = self.gridSize * scale
+    local dw, dh = 1920, 1080
+    if love.window and love.window.getDesktopDimensions then
+        local w, h = love.window.getDesktopDimensions(1)
+        if w and h and w > 0 and h > 0 then dw, dh = w, h end
+    end
+
+    local minGX = math.ceil((0 - (mainWinX + boardX)) / size) + 1
+    local maxGX = math.floor((dw - size - (mainWinX + boardX)) / size) + 1
+    local minGY = math.ceil((0 - (mainWinY + boardY)) / size) + 1
+    local maxGY = math.floor((dh - size - (mainWinY + boardY)) / size) + 1
+
+    local startX = math.max(minGX, 1 - margin)
+    local endX = math.min(maxGX, cols + margin)
+    local startY = math.max(minGY, 1 - margin)
+    local endY = math.min(maxGY, rows + margin)
+
+    local free = {}
+    for r = startY, endY do
+        for c = startX, endX do
+            if (c < 1 or c > cols or r < 1 or r > rows) then
+                if self:isOutsideCellFree(c, r) then
+                    table.insert(free, {x = c, y = r})
+                end
+            end
+        end
+    end
+    return free
+end
+
+function SnakeGame:spawnOutsideFood()
+    if not self.fifthWallActive then return false end
+    local maxOutside = Config.maxOutsideFoods or 3
+    if self.outsideFoods and #self.outsideFoods >= maxOutside then return false end
+    local free = self:getFreeOutsideCells()
+    if #free > 0 then
+        local pos = free[math.random(1, #free)]
+        table.insert(self.outsideFoods, {x = pos.x, y = pos.y})
+        return true
+    end
+    return false
+end
+
+function SnakeGame:spawnOutsideBox()
+    if not self.fifthWallActive then return false end
+    local maxOutside = Config.maxOutsideBoxes or 2
+    if self:getOutsideBoxCount() >= maxOutside then return false end
+    local free = self:getFreeOutsideCells()
+    if #free > 0 then
+        local pos = free[math.random(1, #free)]
+        table.insert(self.boxes, {x = pos.x, y = pos.y})
+        return true
+    end
+    return false
+end
+
+function SnakeGame:activateFifthWall()
+    self:checkDiscovery("event_fifth_wall")
+    self.fifthWallActive = true
+    self.fifthWallTimer = self.fifthWallDuration
+    self.outsideTimer = 0
+    self.outsideSpawnTimer = 0
+    self.outsideFoods = {}
+
+    -- Clean up any previous outside boxes from self.boxes
+    local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+    local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+    for bi = #self.boxes, 1, -1 do
+        local b = self.boxes[bi]
+        if b.x < 1 or b.x > cols or b.y < 1 or b.y > rows then
+            table.remove(self.boxes, bi)
+        end
+    end
+
+    local numFoods = Config.maxOutsideFoods or 3
+    for i = 1, numFoods do
+        self:spawnOutsideFood()
+    end
+    local numBoxes = Config.maxOutsideBoxes or 2
+    for i = 1, numBoxes do
+        self:spawnOutsideBox()
+    end
+
+    Utils.playSFX("levelup", 1.0, 0.7)
+    Utils.notify("Snake", "5TH WALL BREAKOUT! Foods & Boxes spawned on your desktop!", nil, 3.0)
 end
 
 -- ============================================================
@@ -517,10 +704,14 @@ function SnakeGame:spawnDebugItemByCode(code)
         }
         self.powerUpTimer = Config.powerUpDuration
     elseif entry.type == "forbidden_food" then
+        local dur = self.forbiddenFoodDuration or Config.forbiddenFoodDuration or 5.0
         table.insert(self.forbiddenFoods, {
             x = cellX,
             y = cellY,
-            type = entry.subtype or 1
+            type = entry.subtype or 1,
+            timer = dur,
+            maxTimer = dur,
+            blink = 0
         })
     elseif entry.type == "box" then
         table.insert(self.boxes, {
@@ -601,6 +792,8 @@ function SnakeGame:enterForbiddenRealm()
         self.goldenFruit = nil
         self.goldenFruitTimer = 0
         self.boxes = {}
+        self.outsideFoods = {}
+        self:destroyExternalWindows()
     end
 
     self.inForbiddenRealm = true
@@ -828,12 +1021,7 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.notify("Snake", "4TH WALL BREACH! You can slither into void!", nil, 2.5)
 
     elseif ptype == "fifthwall" then
-        self:checkDiscovery("event_fifth_wall")
-        self.fifthWallActive = true
-        self.fifthWallTimer = self.fifthWallDuration
-        self.outsideTimer = 0
-        Utils.playSFX("levelup", 1.0, 0.7)
-        Utils.notify("Snake", "5TH WALL BREAKOUT! Escaping into desktop windows!", nil, 2.5)
+        self:activateFifthWall()
     end
 end
 
@@ -857,6 +1045,9 @@ function SnakeGame:revive()
     self:checkDiscovery("event_death")
     self.lives = self.lives - 1
     if self.lives <= 0 then
+        if self.inForbiddenRealm then
+            self:exitForbiddenRealm()
+        end
         self.gameOver = true
         self.gameOverMessage = "Game Over"
         if not self.matchLogged then
@@ -872,6 +1063,9 @@ function SnakeGame:revive()
         end
         Utils.playSFX("glitch", 1.2, 0.4)
         return false
+    end
+    if self.inForbiddenRealm then
+        self:exitForbiddenRealm()
     end
     self.invincible = true
     self.invincibleTimer = self.invincibleDuration
@@ -1011,7 +1205,7 @@ end
 
 function SnakeGame:updateExternalWindows(scale, boardX, boardY)
     if not _G.sdl then return end
-    if not self.fifthWallActive then
+    if not self.fifthWallActive or self.gameOver then
         if next(self.externalWindows) then self:destroyExternalWindows() end
         return
     end
@@ -1027,7 +1221,7 @@ function SnakeGame:updateExternalWindows(scale, boardX, boardY)
     for i, seg in ipairs(self.snake) do
         local isOutside = (seg.x < 1 or seg.x > cols or seg.y < 1 or seg.y > rows)
         if isOutside then
-            local segKey = tostring(seg.x) .. "_" .. tostring(seg.y)
+            local segKey = "snake_" .. tostring(seg.x) .. "_" .. tostring(seg.y)
             currentOutside[segKey] = true
 
             local absX = mainWinX + boardX + (seg.x - 1) * size
@@ -1099,6 +1293,112 @@ function SnakeGame:updateExternalWindows(scale, boardX, boardY)
         end
     end
 
+    -- Outside Foods (Desktop Apples)
+    if self.outsideFoods then
+        for _, of in ipairs(self.outsideFoods) do
+            local isOutside = (of.x < 1 or of.x > cols or of.y < 1 or of.y > rows)
+            if isOutside then
+                local foodKey = "food_" .. tostring(of.x) .. "_" .. tostring(of.y)
+                currentOutside[foodKey] = true
+
+                local absX = mainWinX + boardX + (of.x - 1) * size
+                local absY = mainWinY + boardY + (of.y - 1) * size
+
+                if not self.externalWindows[foodKey] then
+                    local flags = bit.bor(0x00000010, 0x00008000)
+                    local win = _G.sdl.SDL_CreateWindow("SnakeFood", absX, absY, size, size, flags)
+                    self.externalWindows[foodKey] = {window = win, x = absX, y = absY}
+                else
+                    local winData = self.externalWindows[foodKey]
+                    if winData.x ~= absX or winData.y ~= absY then
+                        _G.sdl.SDL_SetWindowPosition(winData.window, absX, absY)
+                        winData.x = absX
+                        winData.y = absY
+                    end
+                end
+
+                local winData = self.externalWindows[foodKey]
+                local surface = _G.sdl.SDL_GetWindowSurface(winData.window)
+                _G.sdl.SDL_FillRect(surface, nil, 0xFF050505)
+
+                -- Red apple body
+                local bodyRect = ffi.new("SDL_Rect", {x = 2, y = 3, w = math.max(1, size - 4), h = math.max(1, size - 5)})
+                local foodCol = Utils.toUintColor(Config.colors.food or {0.95, 0.25, 0.25})
+                _G.sdl.SDL_FillRect(surface, bodyRect, foodCol)
+
+                -- Green stem / leaf
+                local stemRect = ffi.new("SDL_Rect", {x = math.max(0, math.floor(size / 2) - 1), y = 1, w = math.max(1, 3), h = math.max(1, 2)})
+                _G.sdl.SDL_FillRect(surface, stemRect, Utils.toUintColor({0.3, 0.9, 0.2}))
+
+                -- Shine highlight
+                local shineRect = ffi.new("SDL_Rect", {x = 3, y = 4, w = math.max(1, 2), h = math.max(1, 2)})
+                _G.sdl.SDL_FillRect(surface, shineRect, Utils.toUintColor({1.0, 0.6, 0.6}))
+
+                _G.sdl.SDL_UpdateWindowSurface(winData.window)
+            end
+        end
+    end
+
+    -- Outside Boxes (Desktop Crates)
+    if self.boxes then
+        for _, ob in ipairs(self.boxes) do
+            local isOutside = (ob.x < 1 or ob.x > cols or ob.y < 1 or ob.y > rows)
+            if isOutside then
+                local boxKey = "box_" .. tostring(ob.x) .. "_" .. tostring(ob.y)
+                currentOutside[boxKey] = true
+
+                local absX = mainWinX + boardX + (ob.x - 1) * size
+                local absY = mainWinY + boardY + (ob.y - 1) * size
+
+                if not self.externalWindows[boxKey] then
+                    local flags = bit.bor(0x00000010, 0x00008000)
+                    local win = _G.sdl.SDL_CreateWindow("SnakeBox", absX, absY, size, size, flags)
+                    self.externalWindows[boxKey] = {window = win, x = absX, y = absY}
+                else
+                    local winData = self.externalWindows[boxKey]
+                    if winData.x ~= absX or winData.y ~= absY then
+                        _G.sdl.SDL_SetWindowPosition(winData.window, absX, absY)
+                        winData.x = absX
+                        winData.y = absY
+                    end
+                end
+
+                local winData = self.externalWindows[boxKey]
+                local surface = _G.sdl.SDL_GetWindowSurface(winData.window)
+
+                -- Dark wood border
+                local borderCol = Utils.toUintColor(Config.colors.boxBorder or {0.38, 0.22, 0.08})
+                _G.sdl.SDL_FillRect(surface, nil, borderCol)
+
+                -- Wood plank inner
+                local innerCol = Utils.toUintColor(Config.colors.box or {0.68, 0.42, 0.22})
+                local innerRect = ffi.new("SDL_Rect", {x = 2, y = 2, w = math.max(1, size - 4), h = math.max(1, size - 4)})
+                _G.sdl.SDL_FillRect(surface, innerRect, innerCol)
+
+                -- Wood cross bracing
+                local braceCol = Utils.toUintColor({0.48, 0.28, 0.12})
+                local mid = math.floor(size / 2)
+                local braceH = ffi.new("SDL_Rect", {x = 2, y = math.max(1, mid - 1), w = math.max(1, size - 4), h = 2})
+                _G.sdl.SDL_FillRect(surface, braceH, braceCol)
+                local braceV = ffi.new("SDL_Rect", {x = math.max(1, mid - 1), y = 2, w = 2, h = math.max(1, size - 4)})
+                _G.sdl.SDL_FillRect(surface, braceV, braceCol)
+
+                -- Corner rivets
+                local nailCol = Utils.toUintColor({0.22, 0.12, 0.06})
+                local n1 = ffi.new("SDL_Rect", {x = 2, y = 2, w = 2, h = 2})
+                local n2 = ffi.new("SDL_Rect", {x = math.max(2, size - 4), y = 2, w = 2, h = 2})
+                local n3 = ffi.new("SDL_Rect", {x = 2, y = math.max(2, size - 4), w = 2, h = 2})
+                local n4 = ffi.new("SDL_Rect", {x = math.max(2, size - 4), y = math.max(2, size - 4), w = 2, h = 2})
+                _G.sdl.SDL_FillRect(surface, n1, nailCol)
+                _G.sdl.SDL_FillRect(surface, n2, nailCol)
+                _G.sdl.SDL_FillRect(surface, n3, nailCol)
+                _G.sdl.SDL_FillRect(surface, n4, nailCol)
+
+                _G.sdl.SDL_UpdateWindowSurface(winData.window)
+            end
+        end
+    end
+
     for key, winData in pairs(self.externalWindows) do
         if not currentOutside[key] then
             _G.sdl.SDL_DestroyWindow(winData.window)
@@ -1161,6 +1461,27 @@ function SnakeGame:update(dt)
         if self.fifthWallTimer <= 0 then
             self.fifthWallActive = false
             self.outsideTimer = 0
+            self.outsideFoods = {}
+            local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
+            local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
+            for bi = #self.boxes, 1, -1 do
+                local b = self.boxes[bi]
+                if b.x < 1 or b.x > cols or b.y < 1 or b.y > rows then
+                    table.remove(self.boxes, bi)
+                end
+            end
+            self:destroyExternalWindows()
+        else
+            self.outsideSpawnTimer = (self.outsideSpawnTimer or 0) + dt
+            if self.outsideSpawnTimer >= (Config.outsideSpawnInterval or 4.0) then
+                self.outsideSpawnTimer = 0
+                if self.outsideFoods and #self.outsideFoods < (Config.maxOutsideFoods or 3) then
+                    self:spawnOutsideFood()
+                end
+                if self:getOutsideBoxCount() < (Config.maxOutsideBoxes or 2) then
+                    self:spawnOutsideBox()
+                end
+            end
         end
     end
     if self.fourthWallActive then
@@ -1348,6 +1669,18 @@ function SnakeGame:update(dt)
         end
     end
 
+    -- Forbidden Realm Foods Lifetime / Vanishing
+    if self.forbiddenFoods and #self.forbiddenFoods > 0 then
+        for i = #self.forbiddenFoods, 1, -1 do
+            local f = self.forbiddenFoods[i]
+            f.timer = (f.timer or (self.forbiddenFoodDuration or Config.forbiddenFoodDuration or 5.0)) - dt
+            f.blink = (f.blink or 0) + dt
+            if f.timer <= 0 then
+                table.remove(self.forbiddenFoods, i)
+            end
+        end
+    end
+
     -- Realm Timers & Spawners
     if self.inForbiddenRealm then
         self.forbiddenTimer = self.forbiddenTimer - dt
@@ -1357,9 +1690,13 @@ function SnakeGame:update(dt)
                 self.female.inForbidden = false
                 self.female.forbiddenTimer = 0
             end
+        else
+            while #self.forbiddenFoods < 14 do self:spawnForbiddenFood() end
         end
-        while #self.forbiddenFoods < 14 do self:spawnForbiddenFood() end
     else
+        if #self.forbiddenFoods > 0 then
+            self.forbiddenFoods = {}
+        end
         -- Periodic Box Spawning
         if not self.boxes or #self.boxes < (Config.maxBoxes or 3) then
             self.boxSpawnTimer = (self.boxSpawnTimer or 0) + dt
@@ -1491,7 +1828,7 @@ function SnakeGame:update(dt)
 
             local scoreMult = (self.lustActive and self.lustMultiplier or 1)
 
-            -- Box collision & pushing physics
+            -- Box collision & pushing physics (Handles inside, pushing to bounds, and pushing outside)
             local hitBoxIndex = nil
             if self.boxes then
                 for bi, b in ipairs(self.boxes) do
@@ -1507,19 +1844,75 @@ function SnakeGame:update(dt)
                 local box = self.boxes[hitBoxIndex]
                 local pushTargetX = box.x + self.dir.x
                 local pushTargetY = box.y + self.dir.y
-                local isOutside = (pushTargetX < 1 or pushTargetX > cols or pushTargetY < 1 or pushTargetY > rows)
 
-                if isOutside then
-                    -- Pushed outside the arena boundary! Smash box!
+                local boxWasInside = (box.x >= 1 and box.x <= cols and box.y >= 1 and box.y <= rows)
+                local targetIsInside = (pushTargetX >= 1 and pushTargetX <= cols and pushTargetY >= 1 and pushTargetY <= rows)
+
+                if boxWasInside and not targetIsInside then
+                    -- Box was inside the arena and pushed outside the window/bounds! Smash & Destroy!
                     table.remove(self.boxes, hitBoxIndex)
                     local pts = (Config.boxScore or 100) * scoreMult
                     self:addScore(pts)
                     self:spawnBoxParticles(box.x, box.y)
                     Utils.playSFX("glitch", 1.4, 0.5)
                     Utils.notify("Smash!", "Box smashed outside the arena! +" .. pts .. " pts", nil, 2.0)
+                    if self.fifthWallActive then
+                        self:spawnOutsideBox()
+                    end
+                elseif not boxWasInside and targetIsInside then
+                    -- Box was outside and pushed TO THE BOUNDS into the arena!
+                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
+                    if free then
+                        box.x = pushTargetX
+                        box.y = pushTargetY
+                        Utils.playSFX("tick", 0.7, 0.4)
+                        Utils.notify("In Bounds!", "Crate pushed into the arena bounds!", nil, 1.5)
+                    else
+                        -- Target cell inside arena is blocked! Snake movement is blocked
+                        return
+                    end
+                elseif not boxWasInside and not targetIsInside then
+                    -- Box was outside and pushed to another outside cell on desktop
+                    local mainWinX, mainWinY = 0, 0
+                    if love.window and love.window.getPosition then
+                        mainWinX, mainWinY = love.window.getPosition()
+                    end
+                    local boardX, boardY, _, _, scale = self:getBoardGeometry()
+                    local size = self.gridSize * scale
+                    local absX = mainWinX + boardX + (pushTargetX - 1) * size
+                    local absY = mainWinY + boardY + (pushTargetY - 1) * size
+                    local dw, dh = 1920, 1080
+                    if love.window and love.window.getDesktopDimensions then
+                        local w, h = love.window.getDesktopDimensions(1)
+                        if w and h and w > 0 and h > 0 then dw, dh = w, h end
+                    end
+
+                    local isOffscreen = (absX < 0 or absX + size > dw or absY < 0 or absY + size > dh)
+                    if isOffscreen then
+                        -- Pushed outside desktop screen bounds! Smash & Destroy!
+                        table.remove(self.boxes, hitBoxIndex)
+                        local pts = (Config.boxScore or 100) * scoreMult
+                        self:addScore(pts)
+                        self:spawnBoxParticles(box.x, box.y)
+                        Utils.playSFX("glitch", 1.4, 0.5)
+                        Utils.notify("Smash!", "Crate smashed beyond desktop bounds! +" .. pts .. " pts", nil, 2.0)
+                        if self.fifthWallActive then
+                            self:spawnOutsideBox()
+                        end
+                    else
+                        local free = self:isOutsideCellFree(pushTargetX, pushTargetY)
+                        if free then
+                            box.x = pushTargetX
+                            box.y = pushTargetY
+                            Utils.playSFX("tick", 0.7, 0.4)
+                        else
+                            -- Push target blocked on desktop! Snake movement is blocked
+                            return
+                        end
+                    end
                 else
-                    -- Pushed inside arena: check if target cell is empty
-                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, nil, self.boxes)
+                    -- Box was inside and pushed inside arena
+                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, box, self.boxes)
                     if free then
                         box.x = pushTargetX
                         box.y = pushTargetY
@@ -1544,6 +1937,24 @@ function SnakeGame:update(dt)
                     Utils.playSFX("tick", 1.5, 0.5)
                     self:spawnFood()
                     ate = true
+                end
+                -- Outside Foods (5th Wall Desktop)
+                if self.fifthWallActive and self.outsideFoods then
+                    for fi = #self.outsideFoods, 1, -1 do
+                        local of = self.outsideFoods[fi]
+                        if newHead.x == of.x and newHead.y == of.y then
+                            self:checkDiscovery("food")
+                            local pts = 25 * scoreMult
+                            self:addScore(pts)
+                            self:updateBaseSpeed()
+                            Utils.playSFX("tick", 1.6, 0.6)
+                            Utils.notify("Desktop Harvest!", "Outside Apple Eaten! +" .. pts .. " pts", nil, 1.8)
+                            table.remove(self.outsideFoods, fi)
+                            ate = true
+                            self:spawnOutsideFood()
+                            break
+                        end
+                    end
                 end
                 if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
                     self:checkDiscovery("greenfruit")
@@ -1577,6 +1988,9 @@ function SnakeGame:update(dt)
                         self:checkDiscovery("forbidden_food_" .. f.type)
                         if f.type == 2 then
                             self.forbiddenTimer = math.min(self.forbiddenTimer + 2.5, 15.0)
+                            if self.female and self.female.active then
+                                self.female.forbiddenTimer = self.forbiddenTimer
+                            end
                             Utils.playSFX("levelup", 1.2, 0.6)
                             Utils.notify("Snake", "+2.5s Chrono Shard Harvested!", nil, 1.5)
                         else
@@ -1737,6 +2151,16 @@ function SnakeGame:draw(x, y, width, height)
         Codex.drawIcon("food", fx, fy, size)
     end
 
+    -- Outside Foods (5th Wall Breakout)
+    if self.fifthWallActive and self.outsideFoods then
+        for _, f in ipairs(self.outsideFoods) do
+            local fx = boardX + (f.x - 1) * self.gridSize * scale
+            local fy = boardY + (f.y - 1) * self.gridSize * scale
+            local size = self.gridSize * scale
+            Codex.drawIcon("food", fx, fy, size)
+        end
+    end
+
     -- Lime Green Apple (Rare Fruit)
     if self.greenFruit and not self.inForbiddenRealm then
         local gx = boardX + (self.greenFruit.x - 1) * self.gridSize * scale
@@ -1746,12 +2170,18 @@ function SnakeGame:draw(x, y, width, height)
     end
 
     -- Forbidden Foods
-    if self.inForbiddenRealm or #self.forbiddenFoods > 0 then
+    if self.inForbiddenRealm and #self.forbiddenFoods > 0 then
         for _, f in ipairs(self.forbiddenFoods) do
-            local fx = boardX + (f.x - 1) * self.gridSize * scale
-            local fy = boardY + (f.y - 1) * self.gridSize * scale
-            local size = self.gridSize * scale
-            Codex.drawIcon("forbidden_food_" .. f.type, fx, fy, size)
+            local skip = false
+            if f.timer and f.timer < 1.5 and math.floor((f.blink or 0) * 8) % 2 == 0 then
+                skip = true
+            end
+            if not skip then
+                local fx = boardX + (f.x - 1) * self.gridSize * scale
+                local fy = boardY + (f.y - 1) * self.gridSize * scale
+                local size = self.gridSize * scale
+                Codex.drawIcon("forbidden_food_" .. f.type, fx, fy, size)
+            end
         end
     end
 

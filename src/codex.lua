@@ -177,7 +177,7 @@ Codex.items = {
         name = "5th Wall Breakout",
         category = "Reality Breaker",
         points = "Desktop Windows",
-        desc = "Outside segments escape the game window and materialize as real borderless windows across your desktop!"
+        desc = "Outside segments escape into real desktop windows! Foods and crates materialize across your Windows desktop too."
     },
 
     -- Forbidden Realm Shards
@@ -244,7 +244,7 @@ Codex.items = {
         name = "5th Wall Desktop Escape",
         category = "Secret Milestone",
         points = "Desktop Windows",
-        desc = "Outside segments materialize as real floating borderless windows across your Windows desktop."
+        desc = "Outside segments materialize as real floating borderless windows across your Windows desktop, alongside delicious apples and smashable crates."
     }
 }
 
@@ -290,7 +290,7 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.setColor(col[1], col[2], col[3], pulse)
         love.graphics.rectangle("fill", x - 3, y - 3, size + 6, size + 6, 6, 6)
         love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", x + 1, y + 2, size - 2, size - 4, 4, 4)
+        love.graphics.rectangle("fill", x + 1, y + 2, size - 2, size - 4, 5, 5)
         love.graphics.setColor(1.0, 1.0, 0.8)
         love.graphics.rectangle("fill", x + 3, y + 4, 4, 4, 2, 2)
         love.graphics.setColor(1.0, 0.95, 0.4)

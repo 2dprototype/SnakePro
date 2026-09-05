@@ -37,6 +37,10 @@ Config.boxSpawnInterval = 18.0
 Config.maxBoxes = 3
 Config.initialBoxes = 1
 Config.boxScore = 100
+Config.maxOutsideFoods = 3
+Config.maxOutsideBoxes = 2
+Config.outsideMargin = 8
+Config.outsideSpawnInterval = 4.0
 
 -- Spawning Intervals & Durations
 Config.powerUpSpawnInterval = 7.0
@@ -45,6 +49,7 @@ Config.greenFruitSpawnInterval = 8.0
 Config.greenFruitDuration = 5.0
 Config.goldenFruitSpawnInterval = 25.0
 Config.goldenFruitDuration = 4.0
+Config.forbiddenFoodDuration = 5.0
 
 -- Female Snake Parameters
 Config.femaleDuration = 300 -- 5 minutes
