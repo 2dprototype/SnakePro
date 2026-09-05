@@ -671,7 +671,11 @@ function SnakeGame:spawnOutsideFood()
     local free = self:getFreeOutsideCells()
     if #free > 0 then
         local pos = free[math.random(1, #free)]
-        table.insert(self.outsideFoods, {x = pos.x, y = pos.y})
+        local of = {x = pos.x, y = pos.y}
+        if self.physicsActive then
+            self:initPhysicsItem(of, false)
+        end
+        table.insert(self.outsideFoods, of)
         return true
     end
     return false
@@ -685,7 +689,11 @@ function SnakeGame:spawnOutsideBox()
     local free = self:getFreeOutsideCells()
     if #free > 0 then
         local pos = free[math.random(1, #free)]
-        table.insert(self.boxes, {x = pos.x, y = pos.y})
+        local ob = {x = pos.x, y = pos.y}
+        if self.physicsActive then
+            self:initPhysicsItem(ob, true)
+        end
+        table.insert(self.boxes, ob)
         return true
     end
     return false
@@ -1187,6 +1195,7 @@ function SnakeGame:spawnDebugItemByCode(code)
 
     if entry.type == "food" then
         self.food = {x = cellX, y = cellY}
+        if self.physicsActive then self:initPhysicsItem(self.food, false) end
     elseif entry.type == "greenfruit" then
         self.greenFruit = {
             x = cellX,
@@ -1194,6 +1203,7 @@ function SnakeGame:spawnDebugItemByCode(code)
             timer = self.greenFruitDuration
         }
         self.greenFruitTimer = self.greenFruitDuration
+        if self.physicsActive then self:initPhysicsItem(self.greenFruit, false) end
     elseif entry.type == "goldenfruit" then
         self.goldenFruit = {
             x = cellX,
@@ -1201,6 +1211,7 @@ function SnakeGame:spawnDebugItemByCode(code)
             timer = self.goldenFruitDuration
         }
         self.goldenFruitTimer = self.goldenFruitDuration
+        if self.physicsActive then self:initPhysicsItem(self.goldenFruit, false) end
     elseif entry.type == "powerup" then
         self.powerUp = {
             x = cellX,
@@ -1210,21 +1221,26 @@ function SnakeGame:spawnDebugItemByCode(code)
             blink = 0
         }
         self.powerUpTimer = Config.powerUpDuration
+        if self.physicsActive then self:initPhysicsItem(self.powerUp, false) end
     elseif entry.type == "forbidden_food" then
         local dur = self.forbiddenFoodDuration or Config.forbiddenFoodDuration or 5.0
-        table.insert(self.forbiddenFoods, {
+        local f = {
             x = cellX,
             y = cellY,
             type = entry.subtype or 1,
             timer = dur,
             maxTimer = dur,
             blink = 0
-        })
+        }
+        if self.physicsActive then self:initPhysicsItem(f, false) end
+        table.insert(self.forbiddenFoods, f)
     elseif entry.type == "box" then
-        table.insert(self.boxes, {
+        local b = {
             x = cellX,
             y = cellY
-        })
+        }
+        if self.physicsActive then self:initPhysicsItem(b, true) end
+        table.insert(self.boxes, b)
     end
 
     Utils.playSFX("levelup", 1.8, 0.7)
@@ -1632,14 +1648,14 @@ end
 -- ============================================================
 function SnakeGame:startImmortalEnding()
     self:checkDiscovery("event_immortal_ending")
-    self.food = nil
-    self.powerUp = nil
-    self.greenFruit = nil
-    self.goldenFruit = nil
-    self.forbiddenFoods = {}
-    self.powerUpTimer = 0
-    self.greenFruitTimer = 0
-    self.female:reset()
+    -- self.food = nil
+    -- self.powerUp = nil
+    -- self.greenFruit = nil
+    -- self.goldenFruit = nil
+    -- self.forbiddenFoods = {}
+    -- self.powerUpTimer = 0
+    -- self.greenFruitTimer = 0
+    -- self.female:reset()
 
     self.immortalEnding = true
     self.immortalTimer = 0
