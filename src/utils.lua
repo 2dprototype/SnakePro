@@ -52,7 +52,7 @@ function Utils.toUintColor(colorArr, alpha)
 end
 
 -- Find all unoccupied grid coordinates
-function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake, debugItems)
+function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake)
     local free = {}
     for r = 1, rows do
         for c = 1, cols do
@@ -76,11 +76,6 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
                     if ff.x == c and ff.y == r then occ = true; break end
                 end
             end
-            if not occ and debugItems then
-                for _, item in ipairs(debugItems) do
-                    if item.x == c and item.y == r then occ = true; break end
-                end
-            end
             if not occ then
                 table.insert(free, {x = c, y = r})
             end
@@ -90,7 +85,7 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
 end
 
 -- Check if a specific cell (x, y) is empty
-function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, debugItems, excludeItem)
+function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, excludeItem)
     if snake then
         for _, seg in ipairs(snake) do
             if seg.x == x and seg.y == y then return false end
@@ -108,11 +103,6 @@ function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, 
     if forbiddenFoods then
         for _, f in ipairs(forbiddenFoods) do
             if excludeItem ~= f and f.x == x and f.y == y then return false end
-        end
-    end
-    if debugItems then
-        for _, item in ipairs(debugItems) do
-            if excludeItem ~= item and item.x == x and item.y == y then return false end
         end
     end
     return true

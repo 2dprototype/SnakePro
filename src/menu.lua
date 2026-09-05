@@ -213,7 +213,7 @@ function Menu:draw(width, height, game)
             {"Movement:", "W A S D / Arrow Keys / Swipe"},
             {"Pause Menu:", "[ESC] - Pause / Resume / Exit"},
             {"Quick Restart:", "[R] Key"},
-            {"Debug Cheat:", "[T] - Spawn All Items"},
+            {"Debug Spawn:", "Type [Code 01-28] + Enter at mouse"},
             {"Immortal Ending:", "Bite your own tail!"},
             {"5th Wall Break:", "Escape the game window into desktop"}
         }
