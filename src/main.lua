@@ -1,5 +1,9 @@
+-- ============================================================
+-- SNAKE PRO - MAIN ENTRYPOINT
+-- ============================================================
 local ffi = require("ffi")
 
+-- SDL2 FFI Declarations for 5th Wall Desktop Breakout
 ffi.cdef[[
     typedef void SDL_Window;
     typedef void SDL_Surface;
@@ -20,71 +24,123 @@ ffi.cdef[[
 ]]
 
 if love.system.getOS() == "Windows" then
-    sdl = ffi.load("SDL2")
+    _G.sdl = ffi.load("SDL2")
 else
-    sdl = ffi.C
+    _G.sdl = ffi.C
 end
 
-package.loaded["src/core/audio_manager"] = {
+-- Global Stubs & Fallbacks
+_G.AudioManager = {
     playSFX = function(name, pitch, volume) end
 }
+package.loaded["src/core/audio_manager"] = _G.AudioManager
 
 _G.Notifications = {
     add = function(title, msg, icon, duration) end
 }
 
-local moonshine = require("lib/moonshine")
-local SnakeGame = require("snake")
+-- Module Imports
+local Config = require("config")
+local SnakeGame = require("game")
+local Menu = require("menu")
 
-effect = moonshine(moonshine.effects.scanlines).chain(moonshine.effects.crt)
-effect.scanlines.opacity = 0.6
+-- Application State
+_G.GameState = "main_menu" -- "main_menu", "playing", "paused", "controls"
 
 function love.load()
-    -- Fixed window size, non‑resizable
-    love.window.setMode(420, 440, {resizable = false, vsync = true})
+    love.window.setMode(Config.windowWidth, Config.windowHeight, {resizable = false, vsync = true})
     love.window.setTitle("Snake Pro")
-    game = SnakeGame.new()
+
+    _G.GameInstance = SnakeGame.new()
+    _G.MenuInstance = Menu.new()
 end
 
 function love.update(dt)
-    game:update(dt)
+    if _G.GameState == "playing" then
+        _G.GameInstance:update(dt)
+    end
 end
 
 function love.draw()
-    -- effect(function()
-        -- game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
-    -- end)
-    game:draw(0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    local w = love.graphics.getWidth()
+    local h = love.graphics.getHeight()
+
+    if _G.GameState == "playing" then
+        _G.GameInstance:draw(0, 0, w, h)
+    elseif _G.GameState == "paused" then
+        _G.GameInstance:draw(0, 0, w, h)
+        _G.MenuInstance:draw(w, h, _G.GameInstance)
+    elseif _G.GameState == "main_menu" or _G.GameState == "controls" then
+        _G.MenuInstance:draw(w, h, _G.GameInstance)
+    end
 end
 
 function love.keypressed(key)
-    game:keypressed(key)
-end
+    if key == "escape" then
+        if _G.GameState == "playing" then
+            if _G.GameInstance.gameOver then
+                _G.GameState = "main_menu"
+                _G.MenuInstance:setState("main_menu")
+            else
+                _G.GameState = "paused"
+                _G.MenuInstance:setState("pause_menu")
+            end
+            return
+        elseif _G.GameState == "paused" then
+            _G.GameState = "playing"
+            return
+        elseif _G.GameState == "controls" then
+            _G.MenuInstance:setState(_G.MenuInstance.previousState or "main_menu")
+            return
+        elseif _G.GameState == "main_menu" then
+            love.event.quit()
+            return
+        end
+    end
 
-function love.mousepressed(x, y, button)
-    game:mousepressed(x, y, button)
-end
-
-function love.mousereleased(x, y, button)
-    game:mousereleased(x, y, button)
+    if _G.GameState == "playing" then
+        _G.GameInstance:keypressed(key)
+    else
+        _G.MenuInstance:keypressed(key, _G.GameInstance)
+    end
 end
 
 function love.mousemoved(x, y, dx, dy)
-    if game.mousemoved then game:mousemoved(x, y, dx, dy) end
+    if _G.GameState ~= "playing" then
+        _G.MenuInstance:mousemoved(x, y)
+    end
 end
 
-function love.touchmoved(id, x, y, dx, dy, pressure)
-    if game.touchmoved then game:touchmoved(id, x, y) end
+function love.mousepressed(x, y, button)
+    if _G.GameState == "playing" then
+        _G.GameInstance:mousepressed(x, y, button)
+    else
+        _G.MenuInstance:mousepressed(x, y, button, _G.GameInstance)
+    end
+end
+
+function love.mousereleased(x, y, button)
+    if _G.GameState == "playing" then
+        _G.GameInstance:mousereleased(x, y, button)
+    end
 end
 
 function love.touchpressed(id, x, y, dx, dy, pressure)
-    game:touchpressed(id, x, y)
+    if _G.GameState == "playing" then
+        _G.GameInstance:touchpressed(id, x, y)
+    else
+        _G.MenuInstance:touchpressed(id, x, y, _G.GameInstance)
+    end
 end
 
 function love.touchreleased(id, x, y, dx, dy, pressure)
-    game:touchreleased(id, x, y)
+    if _G.GameState == "playing" then
+        _G.GameInstance:touchreleased(id, x, y)
+    end
 end
 
 function love.quit()
-    -- optional cleanup
+    if _G.GameInstance then
+        _G.GameInstance:destroyExternalWindows()
+    end
 end
