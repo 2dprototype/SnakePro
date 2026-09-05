@@ -149,7 +149,7 @@ function FemaleSnake:findPath(start, targets, obstacles, cols, rows)
     return nil
 end
 
-function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods)
+function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, boxes)
     if not self.body or #self.body == 0 then return nil end
     local head = self.body[1]
     local cols = self.inForbidden and Config.forbiddenCols or Config.cols
@@ -162,6 +162,11 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
     if not self.inForbidden and playerSnake then
         for i = 2, #playerSnake do
             table.insert(obstacles, playerSnake[i])
+        end
+    end
+    if boxes then
+        for _, b in ipairs(boxes) do
+            table.insert(obstacles, b)
         end
     end
 
@@ -511,7 +516,7 @@ function FemaleSnake:update(dt, game)
             local cols = self.inForbidden and Config.forbiddenCols or Config.cols
             local rows = self.inForbidden and Config.forbiddenRows or Config.rows
 
-            local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods)
+            local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, game.boxes)
             if dir then
                 self.nextDir = dir
             else
@@ -526,6 +531,13 @@ function FemaleSnake:update(dt, game)
                             for i = 1, #self.body - 1 do
                                 if self.body[i].x == nx and self.body[i].y == ny then
                                     blocked = true; break
+                                end
+                            end
+                            if not blocked and game.boxes then
+                                for _, b in ipairs(game.boxes) do
+                                    if b.x == nx and b.y == ny then
+                                        blocked = true; break
+                                    end
                                 end
                             end
                         end
@@ -569,6 +581,43 @@ function FemaleSnake:update(dt, game)
                             self.devilPermanent = false
                             self.color = {Config.colors.femaleColor[1], Config.colors.femaleColor[2], Config.colors.femaleColor[3]}
                         end
+                        return
+                    end
+                end
+            end
+
+            -- Box collision & pushing physics
+            local hitBoxIndex = nil
+            if game.boxes then
+                for bi, b in ipairs(game.boxes) do
+                    if b.x == newHead.x and b.y == newHead.y then
+                        hitBoxIndex = bi
+                        break
+                    end
+                end
+            end
+
+            if hitBoxIndex then
+                local box = game.boxes[hitBoxIndex]
+                local pushTargetX = box.x + self.direction.x
+                local pushTargetY = box.y + self.direction.y
+                local isOutside = (pushTargetX < 1 or pushTargetX > cols or pushTargetY < 1 or pushTargetY > rows)
+
+                if isOutside then
+                    table.remove(game.boxes, hitBoxIndex)
+                    game:addScore(Config.boxScore or 100)
+                    if game.spawnBoxParticles then
+                        game:spawnBoxParticles(box.x, box.y)
+                    end
+                    Utils.playSFX("glitch", 1.4, 0.5)
+                    Utils.notify("Smash!", "Female snake smashed a box outside the arena! +100 pts", nil, 2.0)
+                else
+                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, nil, game.boxes)
+                    if free then
+                        box.x = pushTargetX
+                        box.y = pushTargetY
+                        Utils.playSFX("tick", 0.7, 0.4)
+                    else
                         return
                     end
                 end

@@ -31,7 +31,8 @@ local DEBUG_SERIAL_MAP = {
     [21] = {name = "Cosmic Shard", type = "forbidden_food", key = "forbidden_food_1", subtype = 1},
     [22] = {name = "Chrono Shard", type = "forbidden_food", key = "forbidden_food_2", subtype = 2},
     [23] = {name = "Thunder Surge", type = "powerup", key = "speedfood", powerup = "speedfood"},
-    [24] = {name = "Chronostasis (Stop)", type = "powerup", key = "stopfood", powerup = "stopfood"}
+    [24] = {name = "Chronostasis (Stop)", type = "powerup", key = "stopfood", powerup = "stopfood"},
+    [25] = {name = "Wooden Crate", type = "box", key = "box"}
 }
 
 local SnakeGame = {}
@@ -163,6 +164,11 @@ function SnakeGame.new()
     self.goldenFruitSpawnInterval = Config.goldenFruitSpawnInterval
     self.goldenFruitSpawnTimer = 0
 
+    -- Interactive Obstacles (Wooden Boxes)
+    self.boxes = {}
+    self.boxParticles = {}
+    self.boxSpawnTimer = 0
+
     -- AI Female Snake
     self.female = FemaleSnake.new()
     self.matingCooldown = 0
@@ -292,6 +298,13 @@ function SnakeGame:reset()
     self.snakeColors.head = {Config.colors.snakeHead[1], Config.colors.snakeHead[2], Config.colors.snakeHead[3]}
     self.snakeColors.body = {Config.colors.snakeBody[1], Config.colors.snakeBody[2], Config.colors.snakeBody[3]}
 
+    self.boxes = {}
+    self.boxParticles = {}
+    self.boxSpawnTimer = 0
+    for i = 1, (Config.initialBoxes or 1) do
+        self:spawnBox()
+    end
+
     self:spawnFood()
     self.highScore = Storage.getHighScore()
 end
@@ -364,7 +377,39 @@ end
 function SnakeGame:getFreeCells()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    return Utils.findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.female.body)
+    return Utils.findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.female.body, self.boxes)
+end
+
+function SnakeGame:spawnBox()
+    if #self.boxes >= (Config.maxBoxes or 3) then return false end
+    local free = self:getFreeCells()
+    if #free > 0 then
+        local pos = free[math.random(1, #free)]
+        table.insert(self.boxes, {x = pos.x, y = pos.y})
+        return true
+    end
+    return false
+end
+
+function SnakeGame:spawnBoxParticles(gridX, gridY)
+    local count = 16
+    for i = 1, count do
+        local angle = math.random() * 2 * math.pi
+        local speed = math.random(40, 120)
+        local life = math.random() * 0.4 + 0.2
+        local size = math.random(2, 5)
+        local col = (math.random() < 0.5) and (Config.colors.box or {0.72, 0.48, 0.24}) or (Config.colors.boxBorder or {0.45, 0.28, 0.12})
+        table.insert(self.boxParticles, {
+            x = gridX,
+            y = gridY,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            life = life,
+            maxLife = life,
+            size = size,
+            color = col
+        })
+    end
 end
 
 function SnakeGame:spawnFood()
@@ -477,6 +522,11 @@ function SnakeGame:spawnDebugItemByCode(code)
             y = cellY,
             type = entry.subtype or 1
         })
+    elseif entry.type == "box" then
+        table.insert(self.boxes, {
+            x = cellX,
+            y = cellY
+        })
     end
 
     Utils.playSFX("levelup", 1.8, 0.7)
@@ -537,7 +587,9 @@ function SnakeGame:enterForbiddenRealm()
                 timer = self.goldenFruitTimer or self.goldenFruit.timer or Config.goldenFruitDuration
             } or nil,
             goldenFruitTimer = self.goldenFruitTimer,
-            goldenFruitSpawnTimer = self.goldenFruitSpawnTimer
+            goldenFruitSpawnTimer = self.goldenFruitSpawnTimer,
+            boxes = Utils.shallowCopyTable(self.boxes) or {},
+            boxSpawnTimer = self.boxSpawnTimer
         }
 
         -- Clear normal world active items from the grid
@@ -548,6 +600,7 @@ function SnakeGame:enterForbiddenRealm()
         self.greenFruitTimer = 0
         self.goldenFruit = nil
         self.goldenFruitTimer = 0
+        self.boxes = {}
     end
 
     self.inForbiddenRealm = true
@@ -610,6 +663,8 @@ function SnakeGame:exitForbiddenRealm()
         self.goldenFruit = self.storedNormalWorld.goldenFruit
         self.goldenFruitTimer = self.storedNormalWorld.goldenFruitTimer or (self.goldenFruit and self.goldenFruit.timer or 0)
         self.goldenFruitSpawnTimer = self.storedNormalWorld.goldenFruitSpawnTimer or 0
+        self.boxes = self.storedNormalWorld.boxes or {}
+        self.boxSpawnTimer = self.storedNormalWorld.boxSpawnTimer or 0
         self.storedNormalWorld = nil
     end
 
@@ -1280,6 +1335,19 @@ function SnakeGame:update(dt)
         if self.stopTimer < 0 then self.stopTimer = 0 end
     end
 
+    -- Update Box Smash Particles
+    if self.boxParticles and #self.boxParticles > 0 then
+        for i = #self.boxParticles, 1, -1 do
+            local p = self.boxParticles[i]
+            p.x = p.x + (p.vx * dt) / self.gridSize
+            p.y = p.y + (p.vy * dt) / self.gridSize
+            p.life = p.life - dt
+            if p.life <= 0 then
+                table.remove(self.boxParticles, i)
+            end
+        end
+    end
+
     -- Realm Timers & Spawners
     if self.inForbiddenRealm then
         self.forbiddenTimer = self.forbiddenTimer - dt
@@ -1292,6 +1360,15 @@ function SnakeGame:update(dt)
         end
         while #self.forbiddenFoods < 14 do self:spawnForbiddenFood() end
     else
+        -- Periodic Box Spawning
+        if not self.boxes or #self.boxes < (Config.maxBoxes or 3) then
+            self.boxSpawnTimer = (self.boxSpawnTimer or 0) + dt
+            if self.boxSpawnTimer >= (Config.boxSpawnInterval or 18.0) then
+                self.boxSpawnTimer = 0
+                self:spawnBox()
+            end
+        end
+
         if not self.powerUp then
             self.powerUpSpawnTimer = self.powerUpSpawnTimer + dt
             if self.powerUpSpawnTimer >= self.powerUpSpawnInterval then
@@ -1412,10 +1489,51 @@ function SnakeGame:update(dt)
                 end
             end
 
+            local scoreMult = (self.lustActive and self.lustMultiplier or 1)
+
+            -- Box collision & pushing physics
+            local hitBoxIndex = nil
+            if self.boxes then
+                for bi, b in ipairs(self.boxes) do
+                    if b.x == newHead.x and b.y == newHead.y then
+                        hitBoxIndex = bi
+                        break
+                    end
+                end
+            end
+
+            if hitBoxIndex then
+                self:checkDiscovery("box")
+                local box = self.boxes[hitBoxIndex]
+                local pushTargetX = box.x + self.dir.x
+                local pushTargetY = box.y + self.dir.y
+                local isOutside = (pushTargetX < 1 or pushTargetX > cols or pushTargetY < 1 or pushTargetY > rows)
+
+                if isOutside then
+                    -- Pushed outside the arena boundary! Smash box!
+                    table.remove(self.boxes, hitBoxIndex)
+                    local pts = (Config.boxScore or 100) * scoreMult
+                    self:addScore(pts)
+                    self:spawnBoxParticles(box.x, box.y)
+                    Utils.playSFX("glitch", 1.4, 0.5)
+                    Utils.notify("Smash!", "Box smashed outside the arena! +" .. pts .. " pts", nil, 2.0)
+                else
+                    -- Pushed inside arena: check if target cell is empty
+                    local free = Utils.isEmptyCell(pushTargetX, pushTargetY, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, nil, self.boxes)
+                    if free then
+                        box.x = pushTargetX
+                        box.y = pushTargetY
+                        Utils.playSFX("tick", 0.7, 0.4)
+                    else
+                        -- Push target blocked! Snake movement is blocked
+                        return
+                    end
+                end
+            end
+
             table.insert(self.snake, 1, newHead)
 
             local ate = false
-            local scoreMult = (self.lustActive and self.lustMultiplier or 1)
 
             if not self.inForbiddenRealm then
                 if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
@@ -1651,6 +1769,27 @@ function SnakeGame:draw(x, y, width, height)
         local gy = boardY + (self.goldenFruit.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
         Codex.drawIcon("goldenfruit", gx, gy, size)
+    end
+
+    -- Wooden Boxes (Interactive Obstacles)
+    if self.boxes and #self.boxes > 0 then
+        for _, b in ipairs(self.boxes) do
+            local bx = boardX + (b.x - 1) * self.gridSize * scale
+            local by = boardY + (b.y - 1) * self.gridSize * scale
+            local size = self.gridSize * scale
+            Codex.drawIcon("box", bx, by, size)
+        end
+    end
+
+    -- Box Smash Splinter Particles
+    if self.boxParticles and #self.boxParticles > 0 then
+        for _, p in ipairs(self.boxParticles) do
+            local alpha = math.max(0, p.life / p.maxLife)
+            local px = boardX + (p.x - 1) * self.gridSize * scale + (self.gridSize * scale / 2)
+            local py = boardY + (p.y - 1) * self.gridSize * scale + (self.gridSize * scale / 2)
+            love.graphics.setColor(p.color[1], p.color[2], p.color[3], alpha)
+            love.graphics.rectangle("fill", px - (p.size * scale) / 2, py - (p.size * scale) / 2, p.size * scale, p.size * scale)
+        end
     end
 
     -- Player Snake

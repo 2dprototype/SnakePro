@@ -24,6 +24,22 @@ function Utils.distance(p1, p2)
     return math.abs(p1.x - p2.x) + math.abs(p1.y - p2.y)
 end
 
+-- Shallow / 1-level copy of a table or array of tables
+function Utils.shallowCopyTable(orig)
+    if not orig then return {} end
+    local copy = {}
+    for k, v in pairs(orig) do
+        if type(v) == "table" then
+            local sub = {}
+            for sk, sv in pairs(v) do sub[sk] = sv end
+            copy[k] = sub
+        else
+            copy[k] = v
+        end
+    end
+    return copy
+end
+
 -- Convert HSV (0-1) to RGB (0-1)
 function Utils.hsvToRgb(h, s, v)
     local r, g, b
@@ -60,7 +76,7 @@ function Utils.toUintColor(colorArr, alpha)
 end
 
 -- Find all unoccupied grid coordinates
-function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake)
+function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake, boxes)
     local free = {}
     for r = 1, rows do
         for c = 1, cols do
@@ -84,6 +100,11 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
                     if ff.x == c and ff.y == r then occ = true; break end
                 end
             end
+            if not occ and boxes then
+                for _, b in ipairs(boxes) do
+                    if b.x == c and b.y == r then occ = true; break end
+                end
+            end
             if not occ then
                 table.insert(free, {x = c, y = r})
             end
@@ -93,7 +114,7 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
 end
 
 -- Check if a specific cell (x, y) is empty
-function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, excludeItem)
+function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, excludeItem, boxes)
     if snake then
         for _, seg in ipairs(snake) do
             if seg.x == x and seg.y == y then return false end
@@ -102,6 +123,11 @@ function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, 
     if femaleSnake then
         for _, seg in ipairs(femaleSnake) do
             if seg.x == x and seg.y == y then return false end
+        end
+    end
+    if boxes then
+        for _, b in ipairs(boxes) do
+            if excludeItem ~= b and b.x == x and b.y == y then return false end
         end
     end
     if food and excludeItem ~= food and food.x == x and food.y == y then return false end

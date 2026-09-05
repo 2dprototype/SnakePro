@@ -66,6 +66,13 @@ Codex.items = {
         points = "+1 Extra Life",
         desc = "Infuses the snake with a vital heart container (+1 Life, up to maximum 5 lives)."
     },
+    {
+        key = "box",
+        name = "Wooden Crate",
+        category = "Interactive Obstacle",
+        points = "+100 pts (Smash)",
+        desc = "Solid wooden crate that collides with snakes and items. Cannot be eaten. Push it outside the arena boundaries to smash it for +100 bonus points!"
+    },
 
     -- Power Surge
     {
@@ -570,6 +577,26 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.setColor(1.0, 1.0, 1.0, 0.8)
         love.graphics.line(x + size/2, y + 3, x + size/2, y + size - 3)
         love.graphics.line(x + 3, y + size/2, x + size - 3, y + size/2)
+
+    elseif key == "box" then
+        -- Wooden Crate [X]
+        local col = Config.colors.box or {0.72, 0.48, 0.24}
+        local borderCol = Config.colors.boxBorder or {0.45, 0.28, 0.12}
+        love.graphics.setColor(borderCol[1], borderCol[2], borderCol[3], 0.4)
+        love.graphics.rectangle("fill", x - 1, y - 1, size + 2, size + 2, 3, 3)
+        love.graphics.setColor(col[1], col[2], col[3])
+        love.graphics.rectangle("fill", x + 1, y + 1, size - 2, size - 2, 2, 2)
+        love.graphics.setColor(borderCol[1], borderCol[2], borderCol[3])
+        love.graphics.rectangle("line", x + 1.5, y + 1.5, size - 3, size - 3)
+        -- Cross bracing
+        love.graphics.line(x + 3, y + 3, x + size - 3, y + size - 3)
+        love.graphics.line(x + size - 3, y + 3, x + 3, y + size - 3)
+        -- Corner rivets/nails
+        love.graphics.setColor(0.25, 0.15, 0.08)
+        love.graphics.rectangle("fill", x + 2.5, y + 2.5, 1.5, 1.5)
+        love.graphics.rectangle("fill", x + size - 4, y + 2.5, 1.5, 1.5)
+        love.graphics.rectangle("fill", x + 2.5, y + size - 4, 1.5, 1.5)
+        love.graphics.rectangle("fill", x + size - 4, y + size - 4, 1.5, 1.5)
 
     -- EVENT MILESTONES ICONS
     elseif key == "event_death" then
