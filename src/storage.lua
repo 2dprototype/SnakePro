@@ -1,0 +1,193 @@
+-- ============================================================
+-- SNAKE PRO - PERSISTENT JSON STORAGE
+-- ============================================================
+local json = require("lib/json")
+
+local Storage = {}
+local SAVE_FILENAME = "game_data.json"
+local LEGACY_HIGHSCORE_FILE = "snake_highscore.txt"
+
+-- Default Profile Data Structure
+local defaultData = {
+    isFirstTime = true,
+    highScore = 0,
+    discoveredItems = {},
+    history = {},
+    stats = {
+        gamesPlayed = 0,
+        totalScore = 0,
+        totalFoodsEaten = 0,
+        totalMatings = 0,
+        totalDevilFruits = 0,
+        immortalAscensions = 0,
+        totalPlayTime = 0
+    }
+}
+
+Storage.data = nil
+
+-- Deep copy helper
+local function deepCopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepCopy(orig_key)] = deepCopy(orig_value)
+        end
+        setmetatable(copy, deepCopy(getmetatable(orig)))
+    else
+        copy = orig
+    end
+    return copy
+end
+
+-- Initialize and load profile data
+function Storage.load()
+    if Storage.data then return Storage.data end
+    Storage.data = deepCopy(defaultData)
+
+    if love.filesystem and love.filesystem.getInfo and love.filesystem.getInfo(SAVE_FILENAME) then
+        local content = love.filesystem.read(SAVE_FILENAME)
+        if content and #content > 0 then
+            local success, parsed = pcall(json.decode, content)
+            if success and type(parsed) == "table" then
+                if parsed.isFirstTime ~= nil then Storage.data.isFirstTime = parsed.isFirstTime end
+                if parsed.highScore ~= nil then Storage.data.highScore = parsed.highScore end
+                if type(parsed.discoveredItems) == "table" then Storage.data.discoveredItems = parsed.discoveredItems end
+                if type(parsed.history) == "table" then Storage.data.history = parsed.history end
+                if type(parsed.stats) == "table" then
+                    for k, v in pairs(parsed.stats) do
+                        Storage.data.stats[k] = v
+                    end
+                end
+                return Storage.data
+            end
+        end
+    end
+
+    -- Migrate legacy high score if available
+    if love.filesystem and love.filesystem.getInfo and love.filesystem.getInfo(LEGACY_HIGHSCORE_FILE) then
+        local legacyContent = love.filesystem.read(LEGACY_HIGHSCORE_FILE)
+        if legacyContent then
+            local legacyScore = tonumber(legacyContent) or 0
+            if legacyScore > Storage.data.highScore then
+                Storage.data.highScore = legacyScore
+            end
+        end
+    end
+
+    Storage.save()
+    return Storage.data
+end
+
+-- Save profile data to JSON
+function Storage.save()
+    if not Storage.data then Storage.data = deepCopy(defaultData) end
+    if love.filesystem and love.filesystem.write then
+        local success, encoded = pcall(json.encode, Storage.data)
+        if success and encoded then
+            love.filesystem.write(SAVE_FILENAME, encoded)
+        end
+    end
+end
+
+-- First time tutorial methods
+function Storage.isFirstTime()
+    if not Storage.data then Storage.load() end
+    return Storage.data.isFirstTime == true
+end
+
+function Storage.completeFirstTime()
+    if not Storage.data then Storage.load() end
+    Storage.data.isFirstTime = false
+    Storage.save()
+end
+
+-- High score accessors
+function Storage.getHighScore()
+    if not Storage.data then Storage.load() end
+    return Storage.data.highScore or 0
+end
+
+function Storage.setHighScore(newScore)
+    if not Storage.data then Storage.load() end
+    if newScore > (Storage.data.highScore or 0) then
+        Storage.data.highScore = newScore
+        Storage.save()
+    end
+end
+
+-- Discovery codex methods
+function Storage.isDiscovered(itemKey)
+    if not Storage.data then Storage.load() end
+    return Storage.data.discoveredItems[itemKey] == true
+end
+
+function Storage.markDiscovered(itemKey)
+    if not Storage.data then Storage.load() end
+    if not Storage.data.discoveredItems[itemKey] then
+        Storage.data.discoveredItems[itemKey] = true
+        Storage.save()
+        return true -- was newly discovered
+    end
+    return false
+end
+
+function Storage.getDiscoveredCount(totalItems)
+    if not Storage.data then Storage.load() end
+    local count = 0
+    for _ in pairs(Storage.data.discoveredItems or {}) do
+        count = count + 1
+    end
+    return count, totalItems or 28
+end
+
+-- Match history & career statistics
+function Storage.addHistoryRecord(record)
+    if not Storage.data then Storage.load() end
+    
+    local entry = {
+        date = os.date("%Y-%m-%d %H:%M"),
+        score = record.score or 0,
+        devilFruits = record.devilFruits or 0,
+        matings = record.matings or 0,
+        duration = record.duration or 0,
+        outcome = record.outcome or "Defeat"
+    }
+
+    table.insert(Storage.data.history, 1, entry) -- prepend latest run
+    while #Storage.data.history > 50 do
+        table.remove(Storage.data.history)
+    end
+
+    -- Update aggregate stats
+    local s = Storage.data.stats
+    s.gamesPlayed = (s.gamesPlayed or 0) + 1
+    s.totalScore = (s.totalScore or 0) + entry.score
+    s.totalFoodsEaten = (s.totalFoodsEaten or 0) + (record.foodsEaten or 0)
+    s.totalMatings = (s.totalMatings or 0) + entry.matings
+    s.totalDevilFruits = (s.totalDevilFruits or 0) + entry.devilFruits
+    s.totalPlayTime = (s.totalPlayTime or 0) + entry.duration
+    if entry.outcome == "Ascended" or entry.outcome == "Immortal" then
+        s.immortalAscensions = (s.immortalAscensions or 0) + 1
+    end
+
+    if entry.score > (Storage.data.highScore or 0) then
+        Storage.data.highScore = entry.score
+    end
+
+    Storage.save()
+end
+
+function Storage.getHistory()
+    if not Storage.data then Storage.load() end
+    return Storage.data.history or {}
+end
+
+function Storage.getStats()
+    if not Storage.data then Storage.load() end
+    return Storage.data.stats or defaultData.stats
+end
+
+return Storage

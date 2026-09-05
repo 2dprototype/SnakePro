@@ -3,37 +3,39 @@
 -- ============================================================
 local Config = require("config")
 local Utils = require("utils")
+local Storage = require("storage")
+local Codex = require("codex")
 local FemaleSnake = require("female_snake")
 
 local DEBUG_SERIAL_MAP = {
-    [1]  = {name = "Food", type = "food"},
-    [2]  = {name = "Green Fruit", type = "greenfruit"},
-    [3]  = {name = "Golden Fruit (Random)", type = "goldenfruit", subtype = nil},
-    [4]  = {name = "Golden Fruit (Life)", type = "goldenfruit", subtype = 1},
-    [5]  = {name = "Golden Fruit (Score)", type = "goldenfruit", subtype = 2},
-    [6]  = {name = "Golden Fruit (Invincible)", type = "goldenfruit", subtype = 3},
-    [7]  = {name = "Shorten", type = "powerup", powerup = "shorten"},
-    [8]  = {name = "Reverse", type = "powerup", powerup = "reverse"},
-    [9]  = {name = "Speed Up", type = "powerup", powerup = "speedup"},
-    [10] = {name = "Slow Down", type = "powerup", powerup = "slowdown"},
-    [11] = {name = "Extra Life", type = "powerup", powerup = "extralife"},
-    [12] = {name = "Score Boost", type = "powerup", powerup = "scoreboost"},
-    [13] = {name = "Color Change", type = "powerup", powerup = "colorchange"},
-    [14] = {name = "Devil Fruit", type = "powerup", powerup = "devilfruit"},
-    [15] = {name = "Lust Food", type = "powerup", powerup = "lustfood"},
-    [16] = {name = "No Collision", type = "powerup", powerup = "nocollision"},
-    [17] = {name = "Forbidden Realm", type = "powerup", powerup = "forbidden"},
-    [18] = {name = "Mate (Female Snake)", type = "powerup", powerup = "mate"},
-    [19] = {name = "Rainbow Mode", type = "powerup", powerup = "rainbow"},
-    [20] = {name = "Wormhole", type = "powerup", powerup = "wormhole"},
-    [21] = {name = "Whitehole", type = "powerup", powerup = "whitehole"},
-    [22] = {name = "Blackhole", type = "powerup", powerup = "blackhole"},
-    [23] = {name = "4th Wall Break", type = "powerup", powerup = "fourthwall"},
-    [24] = {name = "5th Wall Break", type = "powerup", powerup = "fifthwall"},
-    [25] = {name = "Forbidden Food 1 (Green)", type = "forbidden_food", subtype = 1},
-    [26] = {name = "Forbidden Food 2 (Yellow)", type = "forbidden_food", subtype = 2},
-    [27] = {name = "Forbidden Food 3 (Purple)", type = "forbidden_food", subtype = 3},
-    [28] = {name = "Forbidden Food 4 (+Time)", type = "forbidden_food", subtype = 4}
+    [1]  = {name = "Food", type = "food", key = "food"},
+    [2]  = {name = "Green Fruit", type = "greenfruit", key = "greenfruit"},
+    [3]  = {name = "Golden Fruit (Random)", type = "goldenfruit", key = "goldenfruit_2", subtype = 2},
+    [4]  = {name = "Golden Fruit (Life)", type = "goldenfruit", key = "goldenfruit_1", subtype = 1},
+    [5]  = {name = "Golden Fruit (Score)", type = "goldenfruit", key = "goldenfruit_2", subtype = 2},
+    [6]  = {name = "Golden Fruit (Invincible)", type = "goldenfruit", key = "goldenfruit_3", subtype = 3},
+    [7]  = {name = "Shorten", type = "powerup", key = "shorten", powerup = "shorten"},
+    [8]  = {name = "Reverse", type = "powerup", key = "reverse", powerup = "reverse"},
+    [9]  = {name = "Speed Up", type = "powerup", key = "speedup", powerup = "speedup"},
+    [10] = {name = "Slow Down", type = "powerup", key = "slowdown", powerup = "slowdown"},
+    [11] = {name = "Extra Life", type = "powerup", key = "extralife", powerup = "extralife"},
+    [12] = {name = "Score Boost", type = "powerup", key = "scoreboost", powerup = "scoreboost"},
+    [13] = {name = "Color Change", type = "powerup", key = "colorchange", powerup = "colorchange"},
+    [14] = {name = "Devil Fruit", type = "powerup", key = "devilfruit", powerup = "devilfruit"},
+    [15] = {name = "Lust Food", type = "powerup", key = "lustfood", powerup = "lustfood"},
+    [16] = {name = "No Collision", type = "powerup", key = "nocollision", powerup = "nocollision"},
+    [17] = {name = "Forbidden Realm", type = "powerup", key = "forbidden", powerup = "forbidden"},
+    [18] = {name = "Mate (Female Snake)", type = "powerup", key = "mate", powerup = "mate"},
+    [19] = {name = "Rainbow Mode", type = "powerup", key = "rainbow", powerup = "rainbow"},
+    [20] = {name = "Wormhole", type = "powerup", key = "wormhole", powerup = "wormhole"},
+    [21] = {name = "Whitehole", type = "powerup", key = "whitehole", powerup = "whitehole"},
+    [22] = {name = "Blackhole", type = "powerup", key = "blackhole", powerup = "blackhole"},
+    [23] = {name = "4th Wall Break", type = "powerup", key = "fourthwall", powerup = "fourthwall"},
+    [24] = {name = "5th Wall Break", type = "powerup", key = "fifthwall", powerup = "fifthwall"},
+    [25] = {name = "Forbidden Food 1 (Green)", type = "forbidden_food", key = "forbidden_food_1", subtype = 1},
+    [26] = {name = "Forbidden Food 2 (Yellow)", type = "forbidden_food", key = "forbidden_food_2", subtype = 2},
+    [27] = {name = "Forbidden Food 3 (Purple)", type = "forbidden_food", key = "forbidden_food_3", subtype = 3},
+    [28] = {name = "Forbidden Food 4 (+Time)", type = "forbidden_food", key = "forbidden_food_4", subtype = 4}
 }
 
 local SnakeGame = {}
@@ -50,16 +52,22 @@ function SnakeGame.new()
     self.width = Config.windowWidth
     self.height = Config.windowHeight
     self.score = 0
-    self.highScore = Utils.loadHighScore()
+    self.highScore = Storage.getHighScore()
     self.gameOver = false
     self.paused = false
     self.timer = 0
+    self.sessionTime = 0
     self.baseSpeed = Config.baseSpeed
     self.speed = self.baseSpeed
     self.tempSpeedMultiplier = 1.0
     self.tempSpeedTimer = 0
     self.lives = Config.initialLives
     self.maxLives = Config.maxLives
+
+    -- Tutorial & Discovery State
+    self.showTutorial = Storage.isFirstTime()
+    self.discoveryPopup = nil
+    self.matchLogged = false
 
     -- Debug Input Buffer ("numnum" + Enter)
     self.debugBuffer = ""
@@ -177,6 +185,7 @@ function SnakeGame.new()
     -- Fonts
     self.font = love.graphics.newFont("font/x14y24pxHeadUpDaisy.ttf", 13) or love.graphics.newFont(13)
     self.largeFont = love.graphics.newFont("font/x14y24pxHeadUpDaisy.ttf", 20) or love.graphics.newFont(20)
+    self.titleFont = love.graphics.newFont("font/x14y24pxHeadUpDaisy.ttf", 24) or love.graphics.newFont(24)
     self.smallFont = love.graphics.newFont("font/x14y24pxHeadUpDaisy.ttf", 10) or love.graphics.newFont(10)
 
     self:reset()
@@ -199,6 +208,11 @@ function SnakeGame:reset()
     self.speed = self.baseSpeed
     self.tempSpeedMultiplier = 1.0
     self.tempSpeedTimer = 0
+    self.sessionTime = 0
+    self.matchLogged = false
+
+    self.showTutorial = Storage.isFirstTime()
+    self.discoveryPopup = nil
 
     self.debugBuffer = ""
     self.debugBufferTimer = 0
@@ -269,19 +283,33 @@ function SnakeGame:reset()
     self.snakeColors.body = {Config.colors.snakeBody[1], Config.colors.snakeBody[2], Config.colors.snakeBody[3]}
 
     self:spawnFood()
-    self.highScore = Utils.loadHighScore()
+    self.highScore = Storage.getHighScore()
 end
 
 function SnakeGame:addScore(points)
     self.score = self.score + points
     if self.score > self.highScore then
         self.highScore = self.score
+        Storage.setHighScore(self.highScore)
     end
 end
 
 function SnakeGame:updateBaseSpeed()
     self.baseSpeed = math.max(Config.minSpeed, Config.baseSpeed - math.floor(self.score / 50) * 0.01)
     self.speed = self.baseSpeed
+end
+
+-- ============================================================
+-- DISCOVERY POPUP TRIGGER
+-- ============================================================
+function SnakeGame:checkDiscovery(itemKey)
+    if not itemKey then return end
+    if not Storage.isDiscovered(itemKey) then
+        Storage.markDiscovered(itemKey)
+        self.discoveryPopup = {key = itemKey, timer = 0}
+        self.paused = true
+        Utils.playSFX("levelup", 1.8, 0.8)
+    end
 end
 
 -- ============================================================
@@ -296,7 +324,7 @@ function SnakeGame:getBoardGeometry()
 
     local scale = 1
     if boardW > self.width - 20 or boardH > self.height - barH - 20 then
-        scale = math.min((self.width - 20) / boardW, (self.height - barH - 20) / boardH)
+        scale = math.min((self.width - 20) / boardW, (self.height - barH - boardH) / boardH)
         boardW = boardW * scale
         boardH = boardH * scale
     end
@@ -397,12 +425,12 @@ function SnakeGame:spawnForbiddenFood()
 end
 
 -- ============================================================
--- NEW DEBUG SPAWN SYSTEM: "numnum" + Enter
+-- DEBUG SPAWN SYSTEM: "numnum" + Enter
 -- ============================================================
 function SnakeGame:spawnDebugItemByCode(code)
     local entry = DEBUG_SERIAL_MAP[code]
     if not entry then
-        Utils.notify("Debug", "Unknown code: " .. string.format("%02d", code), nil, 2.0)
+        Utils.notify("Debug", "Unknown code: " .. tostring(code), nil, 2.0)
         return false
     end
 
@@ -439,7 +467,7 @@ function SnakeGame:spawnDebugItemByCode(code)
     end
 
     Utils.playSFX("levelup", 1.8, 0.7)
-    Utils.notify("Debug Spawn", string.format("[%02d] %s at (%d, %d)", code, entry.name, cellX, cellY), nil, 2.0)
+    Utils.notify("Debug Spawn", string.format("[%s] %s at (%d, %d)", tostring(code), entry.name, cellX, cellY), nil, 2.0)
     return true
 end
 
@@ -447,6 +475,7 @@ end
 -- SPECIAL MECHANICS & EFFECTS
 -- ============================================================
 function SnakeGame:enterForbiddenRealm()
+    self:checkDiscovery("event_forbidden_realm")
     self.inForbiddenRealm = true
     self.forbiddenTimer = self.forbiddenDuration
     self.forbiddenFoods = {}
@@ -495,6 +524,7 @@ function SnakeGame:teleportSnake()
 end
 
 function SnakeGame:triggerMating()
+    self:checkDiscovery("event_mating")
     self.mateCount = self.mateCount + 1
     local bonus = 100 + self.mateCount * 50
     self:addScore(bonus)
@@ -513,6 +543,8 @@ end
 
 function SnakeGame:applyPowerUp(powerUp)
     local ptype = powerUp.type
+    self:checkDiscovery(ptype)
+
     if ptype == "shorten" then
         for i = 1, 3 do if #self.snake > 3 then table.remove(self.snake) end end
         Utils.playSFX("tick", 1.2, 0.3)
@@ -567,7 +599,7 @@ function SnakeGame:applyPowerUp(powerUp)
     elseif ptype == "mate" then
         if not self.female.active then
             local free = self:getFreeCells()
-            self.female:spawn(free, self.snake[1], self.inForbiddenRealm, self.forbiddenCols, self.forbiddenRows)
+            self.female:spawn(free, self.snake[1], self.inForbiddenRealm, self.forbiddenCols, self.forbiddenRows, self)
         else
             self.female.timer = math.min(self.female.timer + 30, 600)
             self:addScore(50)
@@ -590,12 +622,14 @@ function SnakeGame:applyPowerUp(powerUp)
         self.blackholeTimer = self.effectDuration
         Utils.playSFX("levelup", 1.0, 0.5)
     elseif ptype == "fourthwall" then
+        self:checkDiscovery("event_fourth_wall")
         self.fourthWallActive = true
         self.fourthWallTimer = self.fourthWallDuration
         self.outsideTimer = 0
         Utils.playSFX("levelup", 1.0, 0.7)
         Utils.notify("Snake", "4TH WALL BREAK! You can leave the grid!", nil, 2.0)
     elseif ptype == "fifthwall" then
+        self:checkDiscovery("event_fifth_wall")
         self.fifthWallActive = true
         self.fifthWallTimer = self.fifthWallDuration
         self.outsideTimer = 0
@@ -607,7 +641,9 @@ end
 function SnakeGame:applyGoldenFruit(fruit)
     fruit = fruit or self.goldenFruit
     if not fruit then return end
-    local ftype = fruit.type
+    local ftype = fruit.type or 1
+    self:checkDiscovery("goldenfruit_" .. ftype)
+
     if ftype == 1 then
         self.lives = math.min(self.lives + 1, self.maxLives)
         Utils.notify("Snake", "GOLDEN FRUIT! Extra life!", nil, 2.0)
@@ -623,11 +659,22 @@ function SnakeGame:applyGoldenFruit(fruit)
 end
 
 function SnakeGame:revive()
+    self:checkDiscovery("event_death")
     self.lives = self.lives - 1
     if self.lives <= 0 then
         self.gameOver = true
         self.gameOverMessage = "Game Over"
-        Utils.saveHighScore(self.highScore)
+        if not self.matchLogged then
+            self.matchLogged = true
+            Storage.addHistoryRecord({
+                score = self.score,
+                devilFruits = self.devilFruitEaten,
+                matings = self.mateCount,
+                duration = math.floor(self.sessionTime),
+                foodsEaten = math.floor(self.score / 10),
+                outcome = "Game Over"
+            })
+        end
         Utils.playSFX("glitch", 1.2, 0.4)
         return false
     end
@@ -666,6 +713,7 @@ end
 -- IMMORTAL ENDING
 -- ============================================================
 function SnakeGame:startImmortalEnding()
+    self:checkDiscovery("event_immortal_ending")
     self.food = nil
     self.powerUp = nil
     self.greenFruit = nil
@@ -728,7 +776,19 @@ function SnakeGame:updateImmortalEnding(dt)
             self.immortalFlash = 1.5
             self.gameOver = true
             self.gameOverMessage = "SNAKE BECAME IMMORTAL"
-            Utils.saveHighScore(self.highScore)
+
+            if not self.matchLogged then
+                self.matchLogged = true
+                Storage.addHistoryRecord({
+                    score = self.score,
+                    devilFruits = self.devilFruitEaten,
+                    matings = self.mateCount,
+                    duration = math.floor(self.sessionTime),
+                    foodsEaten = math.floor(self.score / 10),
+                    outcome = "Ascended"
+                })
+            end
+
             Utils.playSFX("glitch", 0.8, 0.4)
         end
     end
@@ -856,7 +916,14 @@ end
 -- MAIN GAME UPDATE
 -- ============================================================
 function SnakeGame:update(dt)
+    -- Don't advance gameplay if tutorial or discovery popup is active
+    if self.showTutorial or self.discoveryPopup then
+        return
+    end
+
     if self.paused then return end
+
+    self.sessionTime = self.sessionTime + dt
 
     -- Update debug buffer timeout
     if self.debugBufferTimer > 0 then
@@ -1124,7 +1191,17 @@ function SnakeGame:update(dt)
             if self.outsideTimer >= self.outsideMax then
                 self.gameOver = true
                 self.gameOverMessage = "Lost in the void"
-                Utils.saveHighScore(self.highScore)
+                if not self.matchLogged then
+                    self.matchLogged = true
+                    Storage.addHistoryRecord({
+                        score = self.score,
+                        devilFruits = self.devilFruitEaten,
+                        matings = self.mateCount,
+                        duration = math.floor(self.sessionTime),
+                        foodsEaten = math.floor(self.score / 10),
+                        outcome = "Lost in Void"
+                    })
+                end
                 Utils.playSFX("glitch", 1.2, 0.4)
                 return
             end
@@ -1135,6 +1212,7 @@ function SnakeGame:update(dt)
         local ate = false
         if not self.inForbiddenRealm then
             if self.food and newHead.x == self.food.x and newHead.y == self.food.y then
+                self:checkDiscovery("food")
                 local pts = 10 * (self.lustActive and self.lustMultiplier or 1)
                 self:addScore(pts)
                 self:updateBaseSpeed()
@@ -1148,6 +1226,7 @@ function SnakeGame:update(dt)
                 ate = true
             end
             if self.greenFruit and newHead.x == self.greenFruit.x and newHead.y == self.greenFruit.y then
+                self:checkDiscovery("greenfruit")
                 self:addScore(200)
                 self.glowActive = true
                 self.glowTimer = self.glowDuration
@@ -1167,6 +1246,7 @@ function SnakeGame:update(dt)
             for i = #self.forbiddenFoods, 1, -1 do
                 local f = self.forbiddenFoods[i]
                 if newHead.x == f.x and newHead.y == f.y then
+                    self:checkDiscovery("forbidden_food_" .. f.type)
                     if f.type == 4 then
                         self.forbiddenTimer = math.min(self.forbiddenTimer + 2.0, 12.0)
                         Utils.playSFX("levelup", 1.0, 0.6)
@@ -1197,7 +1277,7 @@ function SnakeGame:update(dt)
 end
 
 -- ============================================================
--- DRAWING & HUD
+-- DRAWING & OVERLAYS
 -- ============================================================
 function SnakeGame:draw(x, y, width, height)
     self.width = width
@@ -1321,11 +1401,7 @@ function SnakeGame:draw(x, y, width, height)
         local fx = boardX + (self.food.x - 1) * self.gridSize * scale
         local fy = boardY + (self.food.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local col = Config.colors.food
-        love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", fx + 2, fy + 2, size - 4, size - 4, 3, 3)
-        love.graphics.setColor(col[1] * 0.8, col[2] * 0.5, col[3] * 0.5)
-        love.graphics.rectangle("fill", fx + 4, fy + 4, size - 8, size - 8, 2, 2)
+        Codex.drawIcon("food", fx, fy, size)
     end
 
     -- Forbidden Foods
@@ -1334,52 +1410,7 @@ function SnakeGame:draw(x, y, width, height)
             local fx = boardX + (f.x - 1) * self.gridSize * scale
             local fy = boardY + (f.y - 1) * self.gridSize * scale
             local size = self.gridSize * scale
-            local col = Config.colors["forbidden_food_" .. f.type] or Config.colors.forbidden_food_1
-            love.graphics.setColor(col[1], col[2], col[3])
-            love.graphics.rectangle("fill", fx + 1, fy + 1, size - 2, size - 2, 4, 4)
-            love.graphics.setColor(1, 1, 1, 0.15)
-            love.graphics.rectangle("fill", fx - 2, fy - 2, size + 4, size + 4, 6, 6)
-        end
-    end
-
-    -- Helper: Draw Rainbow Power-up
-    local function drawRainbow(px, py, size, alpha)
-        local rainbowColors = {
-            {1.0, 0.0, 0.0}, {1.0, 0.5, 0.0}, {1.0, 1.0, 0.0},
-            {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {0.29, 0.0, 0.51}, {0.58, 0.0, 0.83}
-        }
-        local cIdx = math.floor(love.timer.getTime() * 6.66) % 7 + 1
-        local col = rainbowColors[cIdx]
-        local glowAlpha = 0.2 + math.sin(love.timer.getTime() * 3) * 0.15
-
-        love.graphics.setColor(col[1], col[2], col[3], glowAlpha)
-        love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 4, 4)
-        love.graphics.setColor(col[1], col[2], col[3], alpha or 1)
-        love.graphics.rectangle("fill", px + 1, py + 1, size - 2, size - 2, 4, 4)
-        love.graphics.setColor(col[1] * 0.8, col[2] * 0.8, col[3] * 0.8, 0.5 * (alpha or 1))
-        love.graphics.rectangle("fill", px + 3, py + 3, size - 8, size - 8, 2, 2)
-    end
-
-    -- Helper: Draw Circle Power-up
-    local function drawCircle(px, py, size, col, glowCol, isBlackhole)
-        local cx = px + size / 2
-        local cy = py + size / 2
-        local rad = size / 2
-        local glow = 0.3 + math.sin(love.timer.getTime() * 2) * 0.1
-
-        love.graphics.setColor(isBlackhole and {1, 1, 1, glow} or {glowCol[1], glowCol[2], glowCol[3], glow})
-        love.graphics.circle("fill", cx, cy, rad + 4)
-        love.graphics.setColor(isBlackhole and {1, 1, 1, 0.15} or {glowCol[1], glowCol[2], glowCol[3], 0.15})
-        love.graphics.circle("fill", cx, cy, rad + 8)
-
-        love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.circle("fill", cx, cy, rad - 1)
-        if not isBlackhole then
-            love.graphics.setColor(col[1] * 0.8, col[2] * 0.8, col[3] * 0.8, 0.5)
-            love.graphics.circle("fill", cx, cy, rad - 4)
-        else
-            love.graphics.setColor(0.3, 0.3, 0.3, 0.5)
-            love.graphics.circle("line", cx, cy, rad - 2)
+            Codex.drawIcon("forbidden_food_" .. f.type, fx, fy, size)
         end
     end
 
@@ -1388,24 +1419,7 @@ function SnakeGame:draw(x, y, width, height)
         local px = boardX + (self.powerUp.x - 1) * self.gridSize * scale
         local py = boardY + (self.powerUp.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local ptype = self.powerUp.type
-
-        if ptype == "rainbow" then
-            drawRainbow(px, py, size, 1)
-        elseif ptype == "blackhole" then
-            drawCircle(px, py, size, Config.colors.blackhole, {1, 1, 1}, true)
-        elseif ptype == "whitehole" then
-            drawCircle(px, py, size, Config.colors.whitehole, {0.8, 0.8, 0.8}, false)
-        elseif ptype == "wormhole" then
-            drawCircle(px, py, size, Config.colors.wormhole, {0.4, 0.2, 0.6}, false)
-        else
-            local col = Config.colors[ptype] or {1, 1, 1}
-            local alpha = (self.powerUpTimer < 2 and math.floor(self.powerUp.blink * 4) % 2 == 0) and 0.4 or 1
-            love.graphics.setColor(col[1], col[2], col[3], alpha)
-            love.graphics.rectangle("fill", px + 1, py + 1, size - 2, size - 2, 4, 4)
-            love.graphics.setColor(col[1], col[2], col[3], 0.3 * alpha)
-            love.graphics.rectangle("fill", px - 2, py - 2, size + 4, size + 4, 6, 6)
-        end
+        Codex.drawIcon(self.powerUp.type, px, py, size)
     end
 
     -- Green Fruit
@@ -1413,13 +1427,7 @@ function SnakeGame:draw(x, y, width, height)
         local gx = boardX + (self.greenFruit.x - 1) * self.gridSize * scale
         local gy = boardY + (self.greenFruit.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local col = Config.colors.greenfruit
-        love.graphics.setColor(col[1], col[2], col[3], 0.25)
-        love.graphics.rectangle("fill", gx - 4, gy - 4, size + 8, size + 8, 6, 6)
-        love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", gx + 1, gy + 1, size - 2, size - 2, 4, 4)
-        love.graphics.setColor(col[1] * 0.6, col[2] * 0.8, col[3] * 0.6)
-        love.graphics.rectangle("fill", gx + 3, gy + 3, size - 8, size - 8, 2, 2)
+        Codex.drawIcon("greenfruit", gx, gy, size)
     end
 
     -- Golden Fruit
@@ -1427,13 +1435,7 @@ function SnakeGame:draw(x, y, width, height)
         local gx = boardX + (self.goldenFruit.x - 1) * self.gridSize * scale
         local gy = boardY + (self.goldenFruit.y - 1) * self.gridSize * scale
         local size = self.gridSize * scale
-        local col = Config.colors.goldenfruit
-        love.graphics.setColor(col[1], col[2], col[3], 0.3 + math.sin(love.timer.getTime() * 4) * 0.15)
-        love.graphics.rectangle("fill", gx - 6, gy - 6, size + 12, size + 12, 8, 8)
-        love.graphics.setColor(col[1], col[2], col[3])
-        love.graphics.rectangle("fill", gx + 1, gy + 1, size - 2, size - 2, 4, 4)
-        love.graphics.setColor(col[1] * 0.9, col[2] * 0.8, col[3] * 0.5)
-        love.graphics.rectangle("fill", gx + 3, gy + 3, size - 8, size - 8, 2, 2)
+        Codex.drawIcon("goldenfruit_" .. (self.goldenFruit.type or 1), gx, gy, size)
     end
 
     -- Player Snake
@@ -1501,11 +1503,128 @@ function SnakeGame:draw(x, y, width, height)
         end
     end
 
-    -- Debug Typed Code Overlay (Bottom Right)
+    -- Debug Typed Code Overlay with dynamic item name preview (Bottom Right)
     if self.debugBuffer and #self.debugBuffer > 0 then
+        local code = tonumber(self.debugBuffer)
+        local itemName = (code and DEBUG_SERIAL_MAP[code]) and DEBUG_SERIAL_MAP[code].name or "Unknown"
+        local isKnown = (code and DEBUG_SERIAL_MAP[code]) ~= nil
+        local text = "SPAWN: [" .. self.debugBuffer .. "] " .. itemName .. " [ENTER]"
+
         love.graphics.setFont(self.smallFont)
-        love.graphics.setColor(1.0, 0.85, 0.2, 0.9)
-        love.graphics.printf("CODE: [" .. self.debugBuffer .. "] + ENTER", 0, height - 20, width - 10, "right")
+        local tw = love.graphics.getFont():getWidth(text)
+        local tx = width - tw - 12
+        local ty = height - 22
+
+        love.graphics.setColor(0.04, 0.04, 0.08, 0.85)
+        love.graphics.rectangle("fill", tx - 4, ty - 2, tw + 8, 18, 3, 3)
+
+        if isKnown then
+            love.graphics.setColor(0.35, 0.95, 0.4, 0.9)
+            love.graphics.rectangle("line", tx - 4, ty - 2, tw + 8, 18, 3, 3)
+            love.graphics.setColor(1.0, 0.9, 0.3)
+        else
+            love.graphics.setColor(0.95, 0.35, 0.35, 0.9)
+            love.graphics.rectangle("line", tx - 4, ty - 2, tw + 8, 18, 3, 3)
+            love.graphics.setColor(0.95, 0.5, 0.5)
+        end
+        love.graphics.print(text, tx, ty)
+    end
+
+    -- ========================================================
+    -- MODAL OVERLAYS: FIRST-TIME GUIDE & DISCOVERY POPUP
+    -- ========================================================
+    if self.showTutorial then
+        -- Tutorial Guide Card
+        love.graphics.setColor(0, 0, 0, 0.88)
+        love.graphics.rectangle("fill", 0, 0, width, height)
+
+        local cardW = width - 40
+        local cardH = height - 60
+        local cardX = 20
+        local cardY = 30
+
+        love.graphics.setColor(0.06, 0.08, 0.14, 0.95)
+        love.graphics.rectangle("fill", cardX, cardY, cardW, cardH, 8, 8)
+        love.graphics.setColor(0.35, 0.75, 1.0, 0.85)
+        love.graphics.rectangle("line", cardX, cardY, cardW, cardH, 8, 8)
+
+        love.graphics.setFont(self.largeFont)
+        love.graphics.setColor(0.4, 1.0, 0.5)
+        love.graphics.printf("WELCOME TO SNAKE PRO!", cardX, cardY + 14, cardW, "center")
+
+        love.graphics.setFont(self.font)
+        love.graphics.setColor(0.9, 0.9, 0.9)
+
+        local tips = {
+            {"[CONTROLS]", "W A S D / Arrow Keys or Swipe"},
+            {"[HARVEST]", "Eat foods to grow & gain high scores"},
+            {"[POWER-UPS]", "Discover 18 unique cosmic power-ups"},
+            {"[AVOID]", "Don't crash into your own body segments"},
+            {"[SECRET]", "Bite your tail to unlock Immortal Ending"},
+            {"[MENU]", "Press [ESC] anytime to pause or restart"}
+        }
+
+        local startY = cardY + 48
+        for _, tip in ipairs(tips) do
+            love.graphics.setColor(0.4, 0.8, 1.0)
+            love.graphics.print(tip[1], cardX + 16, startY)
+            love.graphics.setColor(0.85, 0.85, 0.85)
+            love.graphics.print(tip[2], cardX + 115, startY)
+            startY = startY + 24
+        end
+
+        local pulse = 0.8 + 0.2 * math.sin(love.timer.getTime() * 5)
+        love.graphics.setColor(1.0 * pulse, 0.85 * pulse, 0.2 * pulse)
+        love.graphics.printf("Press [ENTER] or [SPACE] to Play", cardX, cardY + cardH - 34, cardW, "center")
+
+    elseif self.discoveryPopup then
+        -- First-time Food/Power-up Discovery Popup
+        local item = Codex.byKey[self.discoveryPopup.key]
+        if item then
+            love.graphics.setColor(0, 0, 0, 0.85)
+            love.graphics.rectangle("fill", 0, 0, width, height)
+
+            local cardW = width - 48
+            local cardH = 220
+            local cardX = 24
+            local cardY = (height - cardH) / 2
+
+            love.graphics.setColor(0.08, 0.08, 0.14, 0.95)
+            love.graphics.rectangle("fill", cardX, cardY, cardW, cardH, 8, 8)
+            love.graphics.setColor(1.0, 0.85, 0.2, 0.9)
+            love.graphics.rectangle("line", cardX, cardY, cardW, cardH, 8, 8)
+
+            -- Header
+            love.graphics.setFont(self.smallFont)
+            love.graphics.setColor(1.0, 0.85, 0.2)
+            love.graphics.printf("★ NEW DISCOVERY UNLOCKED ★", cardX, cardY + 12, cardW, "center")
+
+            -- Icon
+            local iconSize = 28
+            local iconX = cardX + 20
+            local iconY = cardY + 42
+            Codex.drawIcon(self.discoveryPopup.key, iconX, iconY, iconSize)
+
+            -- Item Title & Category
+            love.graphics.setFont(self.largeFont)
+            love.graphics.setColor(0.35, 0.95, 0.5)
+            love.graphics.print(item.name, iconX + iconSize + 12, iconY - 2)
+
+            love.graphics.setFont(self.smallFont)
+            love.graphics.setColor(0.5, 0.8, 1.0)
+            love.graphics.print(item.category .. " | " .. item.points, iconX + iconSize + 12, iconY + 20)
+
+            -- Description
+            love.graphics.setFont(self.font)
+            love.graphics.setColor(0.9, 0.9, 0.9)
+            love.graphics.printf(item.desc, cardX + 20, cardY + 88, cardW - 40, "left")
+
+            -- Dismiss Prompt
+            local pulse = 0.8 + 0.2 * math.sin(love.timer.getTime() * 5)
+            love.graphics.setFont(self.smallFont)
+            love.graphics.setColor(0.7 * pulse, 0.9 * pulse, 1.0 * pulse)
+            love.graphics.printf("Press [ENTER] / [SPACE] / [ESC] to Continue", cardX, cardY + cardH - 26, cardW, "center")
+        end
     end
 
     -- Game Over Screen
@@ -1537,6 +1656,29 @@ end
 -- INPUT HANDLING
 -- ============================================================
 function SnakeGame:keypressed(key)
+    -- Dismiss Tutorial
+    if self.showTutorial then
+        if key == "return" or key == "space" or key == "escape" then
+            Storage.completeFirstTime()
+            self.showTutorial = false
+            self.paused = false
+            Utils.playSFX("levelup", 1.2, 0.5)
+            return true
+        end
+        return true
+    end
+
+    -- Dismiss Discovery Popup
+    if self.discoveryPopup then
+        if key == "return" or key == "space" or key == "escape" then
+            self.discoveryPopup = nil
+            self.paused = false
+            Utils.playSFX("tick", 1.2, 0.4)
+            return true
+        end
+        return true
+    end
+
     if self.immortalEnding and not self.gameOver then
         return true
     end
@@ -1601,6 +1743,19 @@ function SnakeGame:keypressed(key)
 end
 
 function SnakeGame:handleSwipe(dx, dy)
+    if self.showTutorial then
+        Storage.completeFirstTime()
+        self.showTutorial = false
+        self.paused = false
+        return
+    end
+
+    if self.discoveryPopup then
+        self.discoveryPopup = nil
+        self.paused = false
+        return
+    end
+
     if self.gameOver then
         self:reset()
         return
@@ -1621,6 +1776,19 @@ end
 
 function SnakeGame:mousepressed(x, y, button)
     if button == 1 then
+        if self.showTutorial then
+            Storage.completeFirstTime()
+            self.showTutorial = false
+            self.paused = false
+            return true
+        end
+
+        if self.discoveryPopup then
+            self.discoveryPopup = nil
+            self.paused = false
+            return true
+        end
+
         self.swipeStartX = x
         self.swipeStartY = y
         return true
@@ -1639,6 +1807,19 @@ function SnakeGame:mousereleased(x, y, button)
 end
 
 function SnakeGame:touchpressed(id, x, y)
+    if self.showTutorial then
+        Storage.completeFirstTime()
+        self.showTutorial = false
+        self.paused = false
+        return true
+    end
+
+    if self.discoveryPopup then
+        self.discoveryPopup = nil
+        self.paused = false
+        return true
+    end
+
     self.touchMap = self.touchMap or {}
     self.touchMap[id] = {x = x, y = y}
     return true

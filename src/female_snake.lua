@@ -42,7 +42,7 @@ function FemaleSnake:reset()
     self.devilColor = Config.colors.devilSkin
 end
 
-function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, forbiddenRows)
+function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, forbiddenRows, game)
     if self.active or not freeCells or #freeCells < 5 then return false end
 
     -- Place female snake as far from player head as possible
@@ -81,6 +81,9 @@ function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, fo
 
     Utils.playSFX("levelup", 1.2, 0.5)
     Utils.notify("Snake", "A pink female snake appeared!", nil, 3.0)
+    if game and game.checkDiscovery then
+        game:checkDiscovery("event_female_spawn")
+    end
     return true
 end
 

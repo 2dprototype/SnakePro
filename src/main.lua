@@ -70,7 +70,7 @@ function love.draw()
     elseif _G.GameState == "paused" then
         _G.GameInstance:draw(0, 0, w, h)
         _G.MenuInstance:draw(w, h, _G.GameInstance)
-    elseif _G.GameState == "main_menu" or _G.GameState == "controls" then
+    elseif _G.GameState == "main_menu" or _G.GameState == "controls" or _G.GameState == "status" then
         _G.MenuInstance:draw(w, h, _G.GameInstance)
     end
 end
@@ -89,7 +89,7 @@ function love.keypressed(key)
         elseif _G.GameState == "paused" then
             _G.GameState = "playing"
             return
-        elseif _G.GameState == "controls" then
+        elseif _G.GameState == "controls" or _G.GameState == "status" then
             _G.MenuInstance:setState(_G.MenuInstance.previousState or "main_menu")
             return
         elseif _G.GameState == "main_menu" then
@@ -136,6 +136,12 @@ end
 function love.touchreleased(id, x, y, dx, dy, pressure)
     if _G.GameState == "playing" then
         _G.GameInstance:touchreleased(id, x, y)
+    end
+end
+
+function love.wheelmoved(x, y)
+    if _G.GameState ~= "playing" and _G.MenuInstance and _G.MenuInstance.wheelmoved then
+        _G.MenuInstance:wheelmoved(x, y)
     end
 end
 
