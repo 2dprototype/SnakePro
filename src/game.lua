@@ -35,7 +35,8 @@ local DEBUG_SERIAL_MAP = {
     [25] = {name = "Wooden Crate", type = "box", key = "box"},
     [26] = {name = "Gravity Fruit", type = "powerup", key = "gravityfruit", powerup = "gravityfruit"},
     [27] = {name = "Antigravity Fruit", type = "powerup", key = "antigravity", powerup = "antigravity"},
-    [28] = {name = "Physics Fruit", type = "powerup", key = "physicsfruit", powerup = "physicsfruit"}
+    [28] = {name = "Physics Fruit", type = "powerup", key = "physicsfruit", powerup = "physicsfruit"},
+    [29] = {name = "Gold Coin", type = "coin", key = "coin"}
 }
 
 local SnakeGame = {}
@@ -181,6 +182,20 @@ function SnakeGame.new()
     self.goldenFruitSpawnInterval = Config.goldenFruitSpawnInterval
     self.goldenFruitSpawnTimer = 0
 
+    -- Collectible Currency (Coins) & Upgrades
+    self.coin = nil
+    self.coinTimer = 0
+    self.coinDuration = Config.coinDuration or 8.0
+    self.coinSpawnInterval = Config.coinSpawnInterval or 14.0
+    self.coinSpawnTimer = 0
+    self.coins = Storage.getCoins()
+    self.sessionCoins = 0
+    self.appleScore = 10
+
+    -- Combo System
+    self.combos = {}
+    self.comboPopup = nil
+
     -- Interactive Obstacles (Wooden Boxes)
     self.boxes = {}
     self.boxParticles = {}
@@ -301,6 +316,30 @@ function SnakeGame:reset()
     self.goldenFruitTimer = 0
     self.goldenFruitSpawnTimer = 0
 
+    -- Load Dynamic Upgrades from Storage
+    self.appleScore = Storage.getUpgradeValue("apple_value", 10)
+    self.greenFruitDuration = Storage.getUpgradeValue("green_duration", Config.greenFruitDuration or 5.0)
+    self.greenFruitSpawnInterval = Storage.getUpgradeValue("green_spawn", Config.greenFruitSpawnInterval or 8.0)
+    self.goldenFruitDuration = Storage.getUpgradeValue("golden_duration", Config.goldenFruitDuration or 3.0)
+    self.goldenFruitSpawnInterval = Storage.getUpgradeValue("golden_spawn", Config.goldenFruitSpawnInterval or 25.0)
+    self.speedFoodDuration = Storage.getUpgradeValue("speed_duration", Config.speedFoodDuration or 5.0)
+    self.noCollisionDuration = Storage.getUpgradeValue("ghost_duration", Config.noCollisionDuration or 4.0)
+    self.magnetDuration = Storage.getUpgradeValue("magnet_duration", Config.magnetDuration or 26.0)
+    self.lustDuration = Storage.getUpgradeValue("lust_duration", Config.lustDuration or 5.0)
+    self.coinSpawnInterval = Storage.getUpgradeValue("coin_spawn", Config.coinSpawnInterval or 14.0)
+    self.coinDuration = Config.coinDuration or 8.0
+
+    -- Reset Coin
+    self.coin = nil
+    self.coinTimer = 0
+    self.coinSpawnTimer = 0
+    self.coins = Storage.getCoins()
+    self.sessionCoins = 0
+
+    -- Reset Combos
+    self.combos = {}
+    self.comboPopup = nil
+
     -- Reset Female
     self.female:reset()
     self.matingCooldown = 0
@@ -335,6 +374,21 @@ function SnakeGame:reset()
 
     self:spawnFood()
     self.highScore = Storage.getHighScore()
+    self:refreshUpgrades()
+end
+
+function SnakeGame:refreshUpgrades()
+    self.appleScore = Storage.getUpgradeValue("apple_value", 10)
+    self.greenFruitDuration = Storage.getUpgradeValue("green_duration", Config.greenFruitDuration or 5.0)
+    self.greenFruitSpawnInterval = Storage.getUpgradeValue("green_spawn", Config.greenFruitSpawnInterval or 8.0)
+    self.goldenFruitDuration = Storage.getUpgradeValue("golden_duration", Config.goldenFruitDuration or 3.0)
+    self.goldenFruitSpawnInterval = Storage.getUpgradeValue("golden_spawn", Config.goldenFruitSpawnInterval or 25.0)
+    self.speedFoodDuration = Storage.getUpgradeValue("speed_duration", Config.speedFoodDuration or 5.0)
+    self.noCollisionDuration = Storage.getUpgradeValue("ghost_duration", Config.noCollisionDuration or 4.0)
+    self.magnetDuration = Storage.getUpgradeValue("magnet_duration", Config.magnetDuration or 26.0)
+    self.lustDuration = Storage.getUpgradeValue("lust_duration", Config.lustDuration or 5.0)
+    self.coinSpawnInterval = Storage.getUpgradeValue("coin_fortune", Config.coinSpawnInterval or 14.0)
+    self.coins = Storage.getCoins()
 end
 
 function SnakeGame:addScore(points)
@@ -405,7 +459,95 @@ end
 function SnakeGame:getFreeCells()
     local cols = self.inForbiddenRealm and self.forbiddenCols or self.cols
     local rows = self.inForbiddenRealm and self.forbiddenRows or self.rows
-    return Utils.findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.female.body, self.boxes)
+    return Utils.findFreeCells(self.snake, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, cols, rows, self.female.body, self.boxes, self.coin)
+end
+
+function SnakeGame:getCombo(key)
+    return self.combos and self.combos[key] or 0
+end
+
+function SnakeGame:triggerCombo(key)
+    self.combos = self.combos or {}
+    local isActive = false
+    if key == "speed" and self.tempSpeedTimer > 0 and self.tempSpeedMultiplier > 1.0 then isActive = true
+    elseif key == "glow" and self.glowActive then isActive = true
+    elseif key == "lust" and self.lustActive then isActive = true
+    elseif key == "nocollision" and self.noCollision then isActive = true
+    elseif key == "slowdown" and self.tempSpeedTimer > 0 and self.tempSpeedMultiplier < 1.0 then isActive = true
+    elseif key == "rainbow" and self.rainbowActive then isActive = true
+    elseif key == "magnet" and self.magnetActive then isActive = true
+    elseif key == "golden" and self.invincible then isActive = true
+    end
+
+    if isActive then
+        self.combos[key] = (self.combos[key] or 1) + 1
+    else
+        self.combos[key] = 1
+    end
+
+    local combo = self.combos[key]
+    if combo > 1 then
+        local names = {
+            speed = "SPEED COMBO",
+            glow = "GLOW COMBO",
+            lust = "LUST COMBO",
+            nocollision = "GHOST COMBO",
+            slowdown = "FROST COMBO",
+            rainbow = "RAINBOW COMBO",
+            magnet = "MAGNET COMBO",
+            golden = "GOLDEN COMBO"
+        }
+        local colors = {
+            speed = {1.0, 0.9, 0.1},
+            glow = {0.5, 1.0, 0.3},
+            lust = {1.0, 0.2, 0.6},
+            nocollision = {0.2, 1.0, 0.7},
+            slowdown = {0.3, 0.7, 1.0},
+            rainbow = {0.9, 0.2, 0.9},
+            magnet = {0.4, 0.6, 1.0},
+            golden = {1.0, 0.85, 0.2}
+        }
+        local title = names[key] or "POWER COMBO"
+        self.comboPopup = {
+            text = title .. " x" .. combo .. "!",
+            timer = 2.0,
+            color = colors[key] or {1.0, 0.85, 0.2}
+        }
+    end
+    return combo
+end
+
+function SnakeGame:spawnCoin()
+    if self.inForbiddenRealm or self.coin then return false end
+    local free = self:getFreeCells()
+    if #free > 0 then
+        local cell = free[math.random(1, #free)]
+        self.coin = {
+            x = cell.x,
+            y = cell.y,
+            type = "coin",
+            timer = self.coinDuration or Config.coinDuration or 8.0,
+            blink = 0
+        }
+        self.coinTimer = self.coin.timer
+        if self.physicsActive then
+            self:initPhysicsItem(self.coin, false)
+        end
+        return true
+    end
+    return false
+end
+
+function SnakeGame:collectCoin()
+    self:checkDiscovery("coin")
+    local Storage = require("storage")
+    local totalCoins = Storage.addCoins(1)
+    self.coins = totalCoins
+    self.sessionCoins = (self.sessionCoins or 0) + 1
+    Utils.playSFX("levelup", 2.2, 0.7)
+    Utils.notify("Gold Coin!", "+1 Coin Collected! (Total: " .. totalCoins .. " 🪙)", nil, 2.0)
+    self.coin = nil
+    self.coinTimer = 0
 end
 
 function SnakeGame:getInsideBoxCount()
@@ -664,38 +806,38 @@ function SnakeGame:isSnakeOutside()
 end
 
 function SnakeGame:spawnOutsideFood()
-    if not self.fifthWallActive then return false end
-    if not self:isSnakeOutside() then return false end
-    local maxOutside = Config.maxOutsideFoods or 3
-    if self.outsideFoods and #self.outsideFoods >= maxOutside then return false end
-    local free = self:getFreeOutsideCells()
-    if #free > 0 then
-        local pos = free[math.random(1, #free)]
-        local of = {x = pos.x, y = pos.y}
-        if self.physicsActive then
-            self:initPhysicsItem(of, false)
-        end
-        table.insert(self.outsideFoods, of)
-        return true
-    end
+    -- if not self.fifthWallActive then return false end
+    -- if not self:isSnakeOutside() then return false end
+    -- local maxOutside = Config.maxOutsideFoods or 3
+    -- if self.outsideFoods and #self.outsideFoods >= maxOutside then return false end
+    -- local free = self:getFreeOutsideCells()
+    -- if #free > 0 then
+        -- local pos = free[math.random(1, #free)]
+        -- local of = {x = pos.x, y = pos.y}
+        -- if self.physicsActive then
+            -- self:initPhysicsItem(of, false)
+        -- end
+        -- table.insert(self.outsideFoods, of)
+        -- return true
+    -- end
     return false
 end
 
 function SnakeGame:spawnOutsideBox()
-    if not self.fifthWallActive then return false end
-    if not self:isSnakeOutside() then return false end
-    local maxOutside = Config.maxOutsideBoxes or 2
-    if self:getOutsideBoxCount() >= maxOutside then return false end
-    local free = self:getFreeOutsideCells()
-    if #free > 0 then
-        local pos = free[math.random(1, #free)]
-        local ob = {x = pos.x, y = pos.y}
-        if self.physicsActive then
-            self:initPhysicsItem(ob, true)
-        end
-        table.insert(self.boxes, ob)
-        return true
-    end
+    -- if not self.fifthWallActive then return false end
+    -- if not self:isSnakeOutside() then return false end
+    -- local maxOutside = Config.maxOutsideBoxes or 2
+    -- if self:getOutsideBoxCount() >= maxOutside then return false end
+    -- local free = self:getFreeOutsideCells()
+    -- if #free > 0 then
+        -- local pos = free[math.random(1, #free)]
+        -- local ob = {x = pos.x, y = pos.y}
+        -- if self.physicsActive then
+            -- self:initPhysicsItem(ob, true)
+        -- end
+        -- table.insert(self.boxes, ob)
+        -- return true
+    -- end
     return false
 end
 
@@ -756,6 +898,7 @@ function SnakeGame:activatePhysicsMode()
     if self.powerUp then self:initPhysicsItem(self.powerUp, false) end
     if self.greenFruit then self:initPhysicsItem(self.greenFruit, false) end
     if self.goldenFruit then self:initPhysicsItem(self.goldenFruit, false) end
+    if self.coin then self:initPhysicsItem(self.coin, false) end
     if self.boxes then
         for _, b in ipairs(self.boxes) do self:initPhysicsItem(b, true) end
     end
@@ -837,6 +980,7 @@ function SnakeGame:deactivatePhysicsMode()
     if self.powerUp then snapItem(self.powerUp, cols, rows) end
     if self.greenFruit then snapItem(self.greenFruit, cols, rows) end
     if self.goldenFruit then snapItem(self.goldenFruit, cols, rows) end
+    if self.coin then snapItem(self.coin, cols, rows) end
     if self.boxes then
         for _, b in ipairs(self.boxes) do
             snapItem(b, cols, rows)
@@ -863,7 +1007,7 @@ function SnakeGame:eatItem(item, isPlayer)
 
     if item == self.food then
         self:checkDiscovery("food")
-        local pts = 10 * scoreMult
+        local pts = (self.appleScore or 10) * scoreMult
         self:addScore(pts)
         self:updateBaseSpeed()
         Utils.playSFX("tick", 1.5, 0.5)
@@ -877,24 +1021,38 @@ function SnakeGame:eatItem(item, isPlayer)
         end
     elseif item == self.greenFruit then
         self:checkDiscovery("greenfruit")
-        local pts = 200 * scoreMult
-        self:addScore(pts)
         if isPlayer then
+            local combo = self:triggerCombo("glow")
+            local pts = 200 * combo * scoreMult
+            self:addScore(pts)
             self.glowActive = true
-            self.glowTimer = self.glowDuration
-            self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.6
-            self.tempSpeedTimer = 5.0
-            Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+            self.glowTimer = (self.greenFruitDuration or Config.glowDuration or 5.0) + (combo - 1) * 2.0
+            self.tempSpeedMultiplier = 1.0 + 0.6 * combo
+            self.tempSpeedTimer = self.glowTimer
+            if combo > 1 then
+                Utils.notify("Combo!", "GLOW COMBO x" .. combo .. "! (+" .. string.format("%.1f", self.tempSpeedMultiplier) .. "x Speed)", nil, 2.0)
+            else
+                Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+            end
         else
+            local combo = self.female:triggerCombo("glow")
+            local pts = 200 * combo * scoreMult
+            self:addScore(pts)
             self.female.glow = true
-            self.female.glowTimer = Config.glowDuration
-            self.female.speedMultiplier = self.female.speedMultiplier + 0.6
-            self.female.tempSpeedTimer = Config.glowDuration
-            Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+            self.female.glowTimer = (Config.glowDuration or 5.0) + (combo - 1) * 2.0
+            self.female.speedMultiplier = 1.0 + 0.6 * combo
+            self.female.tempSpeedTimer = self.female.glowTimer
+            if combo > 1 then
+                Utils.notify("Combo!", "Female Glow Combo x" .. combo .. "! (+" .. string.format("%.1f", self.female.speedMultiplier) .. "x Speed)", nil, 2.0)
+            else
+                Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+            end
         end
         Utils.playSFX("levelup", 1.8, 0.8)
         self.greenFruit = nil
         self.greenFruitTimer = 0
+    elseif item == self.coin then
+        self:collectCoin()
     elseif item == self.powerUp then
         local p = self.powerUp
         self.powerUp = nil
@@ -966,6 +1124,7 @@ function SnakeGame:updatePhysicsSimulation(dt)
     if self.powerUp then addItem(self.powerUp, false) end
     if self.greenFruit then addItem(self.greenFruit, false) end
     if self.goldenFruit then addItem(self.goldenFruit, false) end
+    if self.coin then addItem(self.coin, false) end
     if self.boxes then
         for _, b in ipairs(self.boxes) do addItem(b, true) end
     end
@@ -1241,6 +1400,16 @@ function SnakeGame:spawnDebugItemByCode(code)
         }
         if self.physicsActive then self:initPhysicsItem(b, true) end
         table.insert(self.boxes, b)
+    elseif entry.type == "coin" then
+        self.coin = {
+            x = cellX,
+            y = cellY,
+            type = "coin",
+            timer = self.coinDuration or Config.coinDuration or 8.0,
+            blink = 0
+        }
+        self.coinTimer = self.coin.timer
+        if self.physicsActive then self:initPhysicsItem(self.coin, false) end
     end
 
     Utils.playSFX("levelup", 1.8, 0.7)
@@ -1429,16 +1598,27 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.notify("Snake", "U-TURN PARADOX! 180° Direction Swapped", nil, 1.8)
 
     elseif ptype == "nocollision" then
+        local combo = self:triggerCombo("nocollision")
         self.noCollision = true
-        self.noCollisionTimer = Config.noCollisionDuration
+        local baseDur = self.noCollisionDuration or Config.noCollisionDuration or 4.0
+        self.noCollisionTimer = baseDur + (combo - 1) * 2.0
         Utils.playSFX("tick", 1.8, 0.3)
-        Utils.notify("Snake", "GHOST PHASE! Pass through body (4s)", nil, 2.0)
+        if combo > 1 then
+            Utils.notify("Combo!", "GHOST COMBO x" .. combo .. "! Pass through body (" .. string.format("%.0f", self.noCollisionTimer) .. "s)", nil, 2.0)
+        else
+            Utils.notify("Snake", "GHOST PHASE! Pass through body (" .. string.format("%.0f", baseDur) .. "s)", nil, 2.0)
+        end
 
     elseif ptype == "slowdown" then
+        local combo = self:triggerCombo("slowdown")
         self.tempSpeedMultiplier = 0.5
-        self.tempSpeedTimer = Config.frostDuration
+        self.tempSpeedTimer = (Config.frostDuration or 5.0) + (combo - 1) * 2.0
         Utils.playSFX("tick", 0.6, 0.3)
-        Utils.notify("Snake", "FROST HOURGLASS! 50% Slow-Mo (5s)", nil, 2.0)
+        if combo > 1 then
+            Utils.notify("Combo!", "FROST COMBO x" .. combo .. "! 50% Slow-Mo (" .. string.format("%.0f", self.tempSpeedTimer) .. "s)", nil, 2.0)
+        else
+            Utils.notify("Snake", "FROST HOURGLASS! 50% Slow-Mo (5s)", nil, 2.0)
+        end
 
     elseif ptype == "extralife" then
         if self.lives < self.maxLives then
@@ -1472,18 +1652,29 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.notify("Snake", "DEVIL'S FRUIT! +100 pts & Crimson Surge", nil, 2.5)
 
     elseif ptype == "rainbow" then
-        self:addScore(50)
+        local combo = self:triggerCombo("rainbow")
+        self:addScore(50 * combo)
         self.rainbowActive = true
-        self.rainbowTimer = Config.rainbowDuration
+        self.rainbowTimer = (Config.rainbowDuration or 10.0) + (combo - 1) * 3.0
         Utils.playSFX("levelup", 1.3, 0.6)
-        Utils.notify("Snake", "RAINBOW PRISM! Vibrant Spectrum (10s)!", nil, 2.5)
+        if combo > 1 then
+            Utils.notify("Combo!", "RAINBOW COMBO x" .. combo .. "! Vibrant Spectrum (" .. string.format("%.0f", self.rainbowTimer) .. "s)!", nil, 2.5)
+        else
+            Utils.notify("Snake", "RAINBOW PRISM! Vibrant Spectrum (10s)!", nil, 2.5)
+        end
 
     elseif ptype == "speedfood" then
-        self:addScore(50)
-        self.tempSpeedMultiplier = Config.speedFoodMultiplier
-        self.tempSpeedTimer = Config.speedFoodDuration
+        local combo = self:triggerCombo("speed")
+        local bonusSpeed = (combo - 1) * 0.4
+        self.tempSpeedMultiplier = Config.speedFoodMultiplier + bonusSpeed
+        self.tempSpeedTimer = self.speedFoodDuration or Config.speedFoodDuration or 5.0
+        self:addScore(50 * combo)
         Utils.playSFX("levelup", 1.6, 0.7)
-        Utils.notify("Snake", "SPEED SURGE! Lightning Boost (5s)!", nil, 2.0)
+        if combo > 1 then
+            Utils.notify("Combo!", "SPEED COMBO x" .. combo .. "! (+" .. string.format("%.1f", self.tempSpeedMultiplier) .. "x Lightning Surge)", nil, 2.0)
+        else
+            Utils.notify("Snake", "SPEED SURGE! Lightning Boost (5s)!", nil, 2.0)
+        end
 
     elseif ptype == "stopfood" then
         self.stopTimer = Config.stopDuration
@@ -1491,11 +1682,16 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.notify("Snake", "CHRONOSTASIS! Snake Frozen (5s)!", nil, 2.0)
 
     elseif ptype == "magnet" then
+        local combo = self:triggerCombo("magnet")
         self.magnetActive = true
-        self.magnetTimer = Config.magnetDuration
+        self.magnetTimer = (self.magnetDuration or Config.magnetDuration or 26.0) + (combo - 1) * 4.0
         self.magnetStepTimer = 0
         Utils.playSFX("levelup", 1.4, 0.6)
-        Utils.notify("Snake", "COSMIC MAGNET! Vacuuming all foods (6s)!", nil, 2.5)
+        if combo > 1 then
+            Utils.notify("Combo!", "MAGNET COMBO x" .. combo .. "! Vacuuming all items (" .. string.format("%.0f", self.magnetTimer) .. "s)!", nil, 2.5)
+        else
+            Utils.notify("Snake", "COSMIC MAGNET! Vacuuming all foods (" .. string.format("%.0f", self.magnetTimer) .. "s)!", nil, 2.5)
+        end
 
     elseif ptype == "whitehole" then
         self.whiteholeActive = true
@@ -1526,10 +1722,17 @@ function SnakeGame:applyPowerUp(powerUp)
         Utils.playSFX("levelup", 1.2, 0.5)
 
     elseif ptype == "lustfood" then
+        local combo = self:triggerCombo("lust")
         self.lustActive = true
-        self.lustTimer = self.lustDuration
+        local baseDur = self.lustDuration or Config.lustDuration or 5.0
+        self.lustTimer = baseDur + (combo - 1) * 2.5
+        self.lustMultiplier = 3 + (combo - 1) * 2
         Utils.playSFX("task_complete", 1.2, 0.5)
-        Utils.notify("Snake", "LUST BERRY! 3x Points & AI Magnetized!", nil, 2.0)
+        if combo > 1 then
+            Utils.notify("Combo!", "LUST COMBO x" .. combo .. "! " .. self.lustMultiplier .. "x Points & AI Magnetized!", nil, 2.0)
+        else
+            Utils.notify("Snake", "LUST BERRY! 3x Points & AI Magnetized!", nil, 2.0)
+        end
 
     elseif ptype == "forbidden" then
         self:enterForbiddenRealm()
@@ -1572,18 +1775,23 @@ end
 
 function SnakeGame:applyGoldenFruit(fruit)
     self:checkDiscovery("goldenfruit")
+    local combo = self:triggerCombo("golden")
     local mult = (self.lustActive and self.lustMultiplier or 1)
-    local pts = 250 * mult
+    local pts = 250 * mult * combo
     self:addScore(pts)
 
     if self.lives < self.maxLives then
         self.lives = self.lives + 1
     end
     self.invincible = true
-    self.invincibleTimer = 3.0
+    self.invincibleTimer = (self.goldenFruitDuration or 3.0) + (combo - 1) * 1.5
 
     Utils.playSFX("levelup", 2.0, 0.9)
-    Utils.notify("Snake", "GOLDEN JACKPOT! +" .. pts .. " pts, +1 Life & Shield!", nil, 2.5)
+    if combo > 1 then
+        Utils.notify("Combo!", "GOLDEN COMBO x" .. combo .. "! +" .. pts .. " pts & Shield (" .. string.format("%.1f", self.invincibleTimer) .. "s)!", nil, 2.5)
+    else
+        Utils.notify("Snake", "GOLDEN JACKPOT! +" .. pts .. " pts, +1 Life & Shield!", nil, 2.5)
+    end
 end
 
 function SnakeGame:revive()
@@ -1992,14 +2200,28 @@ function SnakeGame:update(dt)
         end
     end
 
+    -- Combo Popup decay
+    if self.comboPopup then
+        self.comboPopup.timer = self.comboPopup.timer - dt
+        if self.comboPopup.timer <= 0 then
+            self.comboPopup = nil
+        end
+    end
+
     if self.matingCooldown > 0 then self.matingCooldown = self.matingCooldown - dt end
     if self.glowActive then
         self.glowTimer = self.glowTimer - dt
-        if self.glowTimer <= 0 then self.glowActive = false end
+        if self.glowTimer <= 0 then
+            self.glowActive = false
+            self.combos["green"] = 0
+        end
     end
     if self.rainbowActive then
         self.rainbowTimer = self.rainbowTimer - dt
-        if self.rainbowTimer <= 0 then self.rainbowActive = false end
+        if self.rainbowTimer <= 0 then
+            self.rainbowActive = false
+            self.combos["rainbow"] = 0
+        end
     end
     if self.fifthWallActive then
         self.fifthWallTimer = self.fifthWallTimer - dt
@@ -2050,7 +2272,10 @@ function SnakeGame:update(dt)
     -- Whitehole physics (repels items away from snake head)
     if self.whiteholeActive then
         self.whiteholeTimer = self.whiteholeTimer - dt
-        if self.whiteholeTimer <= 0 then self.whiteholeActive = false end
+        if self.whiteholeTimer <= 0 then
+            self.whiteholeActive = false
+            self.combos["whitehole"] = 0
+        end
 
         if not self.physicsActive then
             local head = self.snake[1]
@@ -2072,7 +2297,7 @@ function SnakeGame:update(dt)
                         end
                         nx = math.max(1, math.min(cols, nx))
                         ny = math.max(1, math.min(rows, ny))
-                        if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
+                        if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes, self.coin) then
                             item.x = nx
                             item.y = ny
                         end
@@ -2084,6 +2309,7 @@ function SnakeGame:update(dt)
             repelItem(self.powerUp)
             repelItem(self.greenFruit)
             repelItem(self.goldenFruit)
+            repelItem(self.coin)
             if self.inForbiddenRealm then
                 for _, f in ipairs(self.forbiddenFoods) do repelItem(f) end
             end
@@ -2093,7 +2319,10 @@ function SnakeGame:update(dt)
     -- Blackhole physics (attracts items towards snake head)
     if self.blackholeActive then
         self.blackholeTimer = self.blackholeTimer - dt
-        if self.blackholeTimer <= 0 then self.blackholeActive = false end
+        if self.blackholeTimer <= 0 then
+            self.blackholeActive = false
+            self.combos["blackhole"] = 0
+        end
 
         if not self.physicsActive then
             local head = self.snake[1]
@@ -2115,7 +2344,7 @@ function SnakeGame:update(dt)
                         end
                         nx = math.max(1, math.min(cols, nx))
                         ny = math.max(1, math.min(rows, ny))
-                        if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
+                        if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes, self.coin) then
                             item.x = nx
                             item.y = ny
                         end
@@ -2127,6 +2356,7 @@ function SnakeGame:update(dt)
             attractItem(self.powerUp)
             attractItem(self.greenFruit)
             attractItem(self.goldenFruit)
+            attractItem(self.coin)
             if self.inForbiddenRealm then
                 for _, f in ipairs(self.forbiddenFoods) do attractItem(f) end
             end
@@ -2136,7 +2366,10 @@ function SnakeGame:update(dt)
     -- Cosmic Magnet physics (pull foods and shards smoothly towards snake head)
     if self.magnetActive then
         self.magnetTimer = self.magnetTimer - dt
-        if self.magnetTimer <= 0 then self.magnetActive = false end
+        if self.magnetTimer <= 0 then
+            self.magnetActive = false
+            self.combos["magnet"] = 0
+        end
 
         if not self.physicsActive then
             self.magnetStepTimer = (self.magnetStepTimer or 0) + dt
@@ -2160,7 +2393,7 @@ function SnakeGame:update(dt)
                             end
                             local nx = math.max(1, math.min(cols, item.x + stepX))
                             local ny = math.max(1, math.min(rows, item.y + stepY))
-                            if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item) then
+                            if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes, self.coin) then
                                 item.x = nx
                                 item.y = ny
                             end
@@ -2171,6 +2404,7 @@ function SnakeGame:update(dt)
                 pullItem(self.food)
                 pullItem(self.greenFruit)
                 pullItem(self.goldenFruit)
+                pullItem(self.coin)
                 if self.inForbiddenRealm then
                     for _, f in ipairs(self.forbiddenFoods) do pullItem(f) end
                 end
@@ -2180,11 +2414,17 @@ function SnakeGame:update(dt)
 
     if self.gravityActive then
         self.gravityTimer = self.gravityTimer - dt
-        if self.gravityTimer <= 0 then self.gravityActive = false end
+        if self.gravityTimer <= 0 then
+            self.gravityActive = false
+            self.combos["gravityfruit"] = 0
+        end
     end
     if self.antigravityActive then
         self.antigravityTimer = self.antigravityTimer - dt
-        if self.antigravityTimer <= 0 then self.antigravityActive = false end
+        if self.antigravityTimer <= 0 then
+            self.antigravityActive = false
+            self.combos["antigravity"] = 0
+        end
     end
     if self.physicsActive then
         self.physicsTimer = self.physicsTimer - dt
@@ -2209,7 +2449,7 @@ function SnakeGame:update(dt)
                 local nx = item.x
                 local ny = item.y + 1
                 if ny <= rows then
-                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes) then
+                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes, self.coin) then
                         item.y = ny
                         return true
                     end
@@ -2222,6 +2462,7 @@ function SnakeGame:update(dt)
             if self.powerUp then table.insert(movableItems, self.powerUp) end
             if self.greenFruit then table.insert(movableItems, self.greenFruit) end
             if self.goldenFruit then table.insert(movableItems, self.goldenFruit) end
+            if self.coin then table.insert(movableItems, self.coin) end
             if self.boxes then
                 for _, b in ipairs(self.boxes) do
                     if b.y >= 1 and b.y <= rows and b.x >= 1 and b.x <= cols then
@@ -2266,7 +2507,7 @@ function SnakeGame:update(dt)
                 local nx = item.x
                 local ny = item.y - 1
                 if ny >= 1 then
-                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes) then
+                    if Utils.isEmptyCell(nx, ny, self.snake, self.female.body, self.food, self.powerUp, self.greenFruit, self.goldenFruit, self.forbiddenFoods, item, self.boxes, self.coin) then
                         item.y = ny
                         return true
                     end
@@ -2279,6 +2520,7 @@ function SnakeGame:update(dt)
             if self.powerUp then table.insert(movableItems, self.powerUp) end
             if self.greenFruit then table.insert(movableItems, self.greenFruit) end
             if self.goldenFruit then table.insert(movableItems, self.goldenFruit) end
+            if self.coin then table.insert(movableItems, self.coin) end
             if self.boxes then
                 for _, b in ipairs(self.boxes) do
                     if b.y >= 1 and b.y <= rows and b.x >= 1 and b.x <= cols then
@@ -2323,15 +2565,24 @@ function SnakeGame:update(dt)
 
     if self.invincible then
         self.invincibleTimer = self.invincibleTimer - dt
-        if self.invincibleTimer <= 0 then self.invincible = false end
+        if self.invincibleTimer <= 0 then
+            self.invincible = false
+            self.combos["golden"] = 0
+        end
     end
     if self.noCollision then
         self.noCollisionTimer = self.noCollisionTimer - dt
-        if self.noCollisionTimer <= 0 then self.noCollision = false end
+        if self.noCollisionTimer <= 0 then
+            self.noCollision = false
+            self.combos["nocollision"] = 0
+        end
     end
     if self.lustActive then
         self.lustTimer = self.lustTimer - dt
-        if self.lustTimer <= 0 then self.lustActive = false end
+        if self.lustTimer <= 0 then
+            self.lustActive = false
+            self.combos["lust"] = 0
+        end
     end
     if self.colorChangeTimer > 0 then
         self.colorChangeTimer = self.colorChangeTimer - dt
@@ -2341,7 +2592,11 @@ function SnakeGame:update(dt)
     end
     if self.tempSpeedTimer > 0 then
         self.tempSpeedTimer = self.tempSpeedTimer - dt
-        if self.tempSpeedTimer <= 0 then self.tempSpeedMultiplier = 1.0 end
+        if self.tempSpeedTimer <= 0 then
+            self.tempSpeedMultiplier = 1.0
+            self.combos["speed"] = 0
+            self.combos["slowdown"] = 0
+        end
     end
     if self.stopTimer > 0 then
         self.stopTimer = self.stopTimer - dt
@@ -2430,6 +2685,19 @@ function SnakeGame:update(dt)
         else
             self.goldenFruitTimer = self.goldenFruitTimer - dt
             if self.goldenFruitTimer <= 0 then self.goldenFruit = nil end
+        end
+
+        -- Gold Coin Spawning & Lifecycle
+        if not self.coin then
+            self.coinSpawnTimer = (self.coinSpawnTimer or 0) + dt
+            if self.coinSpawnTimer >= (self.coinSpawnInterval or Config.coinSpawnInterval or 14.0) then
+                self.coinSpawnTimer = 0
+                self:spawnCoin()
+            end
+        else
+            self.coinTimer = (self.coinTimer or (Config.coinDuration or 8.0)) - dt
+            self.coin.blink = (self.coin.blink or 0) + dt
+            if self.coinTimer <= 0 then self.coin = nil end
         end
     end
 
@@ -2669,14 +2937,19 @@ function SnakeGame:update(dt)
                 end
                 if self.greenFruit and checkSnakeItemHit(self.greenFruit) then
                     self:checkDiscovery("greenfruit")
-                    local pts = 200 * scoreMult
+                    local combo = self:triggerCombo("green")
+                    local pts = (200 + (combo - 1) * 100) * scoreMult
                     self:addScore(pts)
                     self.glowActive = true
-                    self.glowTimer = self.glowDuration
-                    self.tempSpeedMultiplier = self.tempSpeedMultiplier + 0.6
-                    self.tempSpeedTimer = 5.0
+                    self.glowTimer = (self.greenFruitDuration or Config.greenFruitDuration or 6.0) + (combo - 1) * 2.0
+                    self.tempSpeedMultiplier = 1.0 + 0.6 * combo
+                    self.tempSpeedTimer = 5.0 + (combo - 1) * 1.5
                     Utils.playSFX("levelup", 1.8, 0.8)
-                    Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+                    if combo > 1 then
+                        Utils.notify("Combo!", "GREEN COMBO x" .. combo .. "! Glow Speed & +" .. pts .. " pts!", nil, 2.0)
+                    else
+                        Utils.notify("Snake", "Lime Green Apple! +200 & Glow Speed!", nil, 2.0)
+                    end
                     self.greenFruit = nil
                     self.greenFruitTimer = 0
                     ate = true
@@ -2690,6 +2963,10 @@ function SnakeGame:update(dt)
                     self:applyGoldenFruit(self.goldenFruit)
                     self.goldenFruit = nil
                     self.goldenFruitTimer = 0
+                    ate = true
+                end
+                if self.coin and checkSnakeItemHit(self.coin) then
+                    self:collectCoin(self.coin)
                     ate = true
                 end
             else
@@ -2791,13 +3068,16 @@ function SnakeGame:draw(x, y, width, height)
     love.graphics.setColor(self.inForbiddenRealm and {0.12, 0.04, 0.18} or {0.06, 0.06, 0.06})
     love.graphics.rectangle("fill", 0, 0, width, barH)
 
-    -- Row 1: Scores & Lives
+    -- Row 1: Scores, Coins & Lives
     love.graphics.setFont(self.font)
     love.graphics.setColor(0.35, 0.75, 1.0)
     love.graphics.print("SCORE: " .. tostring(self.score), 10, 6)
 
     love.graphics.setColor(0.85, 0.75, 0.3)
-    love.graphics.print("HIGH: " .. tostring(self.highScore), 130, 6)
+    love.graphics.print("HIGH: " .. tostring(self.highScore), 125, 6)
+
+    love.graphics.setColor(1.0, 0.84, 0.0)
+    love.graphics.print("COINS: " .. tostring(Storage.getCoins()), 235, 6)
 
     local rightX = width - 10
     love.graphics.setColor(0.9, 0.3, 0.3)
@@ -2819,26 +3099,38 @@ function SnakeGame:draw(x, y, width, height)
         love.graphics.print(string.format("F:%02d:%02d", mins, secs), rightX - 55, 8)
     end
 
-    -- Row 2: Status Badges
+    -- Row 2: Status Badges (with live combo indicators)
     love.graphics.setFont(self.smallFont)
     local statusX = 10
     local statusY = 28
     local statuses = {}
 
-    if self.noCollision then statuses[#statuses+1] = {text = "NC", color = {0.2, 0.9, 0.9}} end
-    if self.tempSpeedMultiplier < 1.0 then statuses[#statuses+1] = {text = "FROST", color = {0.3, 0.7, 1.0}} end
-    if self.tempSpeedMultiplier > 1.0 and self.tempSpeedTimer > 0 then statuses[#statuses+1] = {text = "SPEED", color = {1.0, 0.9, 0.1}} end
+    local function getComboSuffix(key)
+        local c = self:getCombo(key)
+        return (c > 1) and (" x" .. c) or ""
+    end
+
+    if self.noCollision then statuses[#statuses+1] = {text = "NC" .. getComboSuffix("nocollision"), color = {0.2, 0.9, 0.9}} end
+    if self.tempSpeedMultiplier < 1.0 then statuses[#statuses+1] = {text = "FROST" .. getComboSuffix("slowdown"), color = {0.3, 0.7, 1.0}} end
+    if self.tempSpeedMultiplier > 1.0 and self.tempSpeedTimer > 0 then
+        local spdCombo = self:getCombo("speed")
+        local spdText = (spdCombo > 1) and ("SPEED x" .. spdCombo) or "SPEED"
+        statuses[#statuses+1] = {text = spdText, color = {1.0, 0.9, 0.1}}
+    end
     if self.stopTimer > 0 then statuses[#statuses+1] = {text = string.format("STOP (%.0fs)", math.ceil(self.stopTimer)), color = {0.95, 0.3, 0.3}} end
-    if self.glowActive then statuses[#statuses+1] = {text = "GLOW", color = {0.5, 1.0, 0.3}} end
-    if self.rainbowActive then statuses[#statuses+1] = {text = "RAINBOW", color = {0.9, 0.2, 0.9}} end
-    if self.magnetActive then statuses[#statuses+1] = {text = "MAGNET", color = {0.4, 0.6, 1.0}} end
-    if self.whiteholeActive then statuses[#statuses+1] = {text = "WH", color = {1.0, 1.0, 1.0}} end
-    if self.blackholeActive then statuses[#statuses+1] = {text = "BH", color = {0.4, 0.4, 0.4}} end
-    if self.gravityActive then statuses[#statuses+1] = {text = "GRAV", color = {0.7, 0.3, 0.95}} end
-    if self.antigravityActive then statuses[#statuses+1] = {text = "AGRAV", color = {0.2, 0.9, 0.85}} end
+    if self.glowActive then statuses[#statuses+1] = {text = "GLOW" .. getComboSuffix("green"), color = {0.5, 1.0, 0.3}} end
+    if self.rainbowActive then statuses[#statuses+1] = {text = "RAINBOW" .. getComboSuffix("rainbow"), color = {0.9, 0.2, 0.9}} end
+    if self.magnetActive then statuses[#statuses+1] = {text = "MAGNET" .. getComboSuffix("magnet"), color = {0.4, 0.6, 1.0}} end
+    if self.whiteholeActive then statuses[#statuses+1] = {text = "WH" .. getComboSuffix("whitehole"), color = {1.0, 1.0, 1.0}} end
+    if self.blackholeActive then statuses[#statuses+1] = {text = "BH" .. getComboSuffix("blackhole"), color = {0.4, 0.4, 0.4}} end
+    if self.gravityActive then statuses[#statuses+1] = {text = "GRAV" .. getComboSuffix("gravityfruit"), color = {0.7, 0.3, 0.95}} end
+    if self.antigravityActive then statuses[#statuses+1] = {text = "AGRAV" .. getComboSuffix("antigravity"), color = {0.2, 0.9, 0.85}} end
     if self.physicsActive then statuses[#statuses+1] = {text = "ZERO-G", color = {0.95, 0.8, 0.1}} end
-    if self.lustActive then statuses[#statuses+1] = {text = "LUST (3X)", color = {1.0, 0.2, 0.6}} end
-    if self.invincible then statuses[#statuses+1] = {text = "SHIELD", color = {1.0, 0.85, 0.2}} end
+    if self.lustActive then
+        local lMult = self.lustMultiplier or 3
+        statuses[#statuses+1] = {text = "LUST (" .. lMult .. "X)" .. getComboSuffix("lust"), color = {1.0, 0.2, 0.6}}
+    end
+    if self.invincible then statuses[#statuses+1] = {text = "SHIELD" .. getComboSuffix("golden"), color = {1.0, 0.85, 0.2}} end
     if self.inForbiddenRealm then statuses[#statuses+1] = {text = "REALM", color = {0.8, 0.3, 0.9}} end
     if self.fourthWallActive then statuses[#statuses+1] = {text = "4W", color = {0.0, 0.8, 0.8}} end
     if self.fifthWallActive then statuses[#statuses+1] = {text = "5W", color = {0.0, 1.0, 0.4}} end
@@ -2916,6 +3208,17 @@ function SnakeGame:draw(x, y, width, height)
     -- Golden Fruit
     if self.goldenFruit and not self.inForbiddenRealm then
         self:drawPhysicsOrGridIcon("goldenfruit", self.goldenFruit, boardX, boardY, scale)
+    end
+
+    -- Gold Coin (Real Purchase Currency)
+    if self.coin and not self.inForbiddenRealm then
+        local skip = false
+        if self.coinTimer and self.coinTimer < 2.0 and math.floor((self.coin.blink or 0) * 8) % 2 == 0 then
+            skip = true
+        end
+        if not skip then
+            self:drawPhysicsOrGridIcon("coin", self.coin, boardX, boardY, scale)
+        end
     end
 
     -- Wooden Boxes (Interactive Obstacles)
@@ -3001,6 +3304,30 @@ function SnakeGame:draw(x, y, width, height)
         end
     end
 
+    -- Combo Floating Banner Popup
+    if self.comboPopup and self.comboPopup.timer > 0 then
+        local cp = self.comboPopup
+        local alpha = math.min(1.0, cp.timer / 0.3)
+        local maxT = cp.maxTimer or 1.2
+        local scalePulse = 1.0 + (cp.timer / maxT) * 0.25
+        love.graphics.setFont(self.largeFont)
+        local text = "★ COMBO x" .. tostring(cp.count) .. " ★"
+        local tw = love.graphics.getFont():getWidth(text)
+        local th = love.graphics.getFont():getHeight()
+        local cx = boardX + boardW / 2
+        local cy = boardY + 28
+
+        love.graphics.push()
+        love.graphics.translate(cx, cy)
+        love.graphics.scale(scalePulse, scalePulse)
+        love.graphics.setColor(0.04, 0.04, 0.08, 0.88 * alpha)
+        love.graphics.rectangle("fill", -tw / 2 - 16, -th / 2 - 6, tw + 32, th + 12, 8, 8)
+        love.graphics.setColor(1.0, 0.84, 0.0, 0.95 * alpha)
+        love.graphics.rectangle("line", -tw / 2 - 16, -th / 2 - 6, tw + 32, th + 12, 8, 8)
+        love.graphics.printf(text, -tw / 2, -th / 2, tw, "center")
+        love.graphics.pop()
+    end
+
     -- Debug Typed Code Overlay with dynamic item name preview (Bottom Right)
     if self.debugBuffer and #self.debugBuffer > 0 then
         local code = tonumber(self.debugBuffer)
@@ -3055,20 +3382,21 @@ function SnakeGame:draw(x, y, width, height)
 
         local tips = {
             {"[CONTROLS]", "W A S D / Arrow Keys or Swipe"},
-            {"[HARVEST]", "Eat foods to grow & gain high scores"},
-            {"[POWER-UPS]", "Discover 22 unique foods & powers"},
+            {"[HARVEST]", "Eat foods & collect Gold Coins 🪙"},
+            {"[COMBOS]", "Chain power-ups for stacked buffs & multipliers"},
+            {"[UPGRADES]", "Spend Coins in Shop to upgrade fruits & powers"},
             {"[AVOID]", "Don't crash into your own body segments"},
             {"[SECRET]", "Bite your tail to unlock Immortal Ending"},
-            {"[MENU]", "Press [ESC] anytime to pause or restart"}
+            {"[MENU]", "Press [ESC] anytime to pause or shop"}
         }
 
-        local startY = cardY + 48
+        local startY = cardY + 44
         for _, tip in ipairs(tips) do
             love.graphics.setColor(0.4, 0.8, 1.0)
             love.graphics.print(tip[1], cardX + 16, startY)
             love.graphics.setColor(0.85, 0.85, 0.85)
             love.graphics.print(tip[2], cardX + 115, startY)
-            startY = startY + 24
+            startY = startY + 22
         end
 
         local pulse = 0.8 + 0.2 * math.sin(love.timer.getTime() * 5)
@@ -3133,17 +3461,20 @@ function SnakeGame:draw(x, y, width, height)
         love.graphics.setFont(self.largeFont)
         if self.gameOverMessage then
             love.graphics.setColor(1.0, 0.85, 0.2)
-            love.graphics.printf(self.gameOverMessage, boardX, boardY + boardH / 2 - 45, boardW, "center")
+            love.graphics.printf(self.gameOverMessage, boardX, boardY + boardH / 2 - 50, boardW, "center")
         else
             love.graphics.setColor(0.95, 0.35, 0.35)
-            love.graphics.printf("GAME OVER", boardX, boardY + boardH / 2 - 45, boardW, "center")
+            love.graphics.printf("GAME OVER", boardX, boardY + boardH / 2 - 50, boardW, "center")
         end
 
         love.graphics.setFont(self.font)
         love.graphics.setColor(1, 1, 1)
-        love.graphics.printf("Press [SPACE] / [R] to Restart", boardX, boardY + boardH / 2 + 2, boardW, "center")
-        love.graphics.printf("Press [ESC] for Main Menu", boardX, boardY + boardH / 2 + 22, boardW, "center")
-        love.graphics.printf("Final Score: " .. self.score, boardX, boardY + boardH / 2 + 45, boardW, "center")
+        love.graphics.printf("Press [SPACE] / [R] to Restart", boardX, boardY + boardH / 2 - 2, boardW, "center")
+        love.graphics.printf("Press [ESC] for Main Menu", boardX, boardY + boardH / 2 + 18, boardW, "center")
+        love.graphics.printf("Final Score: " .. self.score, boardX, boardY + boardH / 2 + 40, boardW, "center")
+
+        love.graphics.setColor(1.0, 0.84, 0.0)
+        love.graphics.printf("Coins Collected: +" .. (self.sessionCoins or 0) .. "  (Total: " .. Storage.getCoins() .. " 🪙)", boardX, boardY + boardH / 2 + 62, boardW, "center")
     end
 
     self:updateExternalWindows(scale, boardX, boardY)

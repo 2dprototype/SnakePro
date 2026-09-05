@@ -45,6 +45,7 @@ function FemaleSnake:reset()
     self.forbiddenTimer = 0
     self.glow = false
     self.glowTimer = 0
+    self.combos = {}
 
     self.color = {Config.colors.femaleColor[1], Config.colors.femaleColor[2], Config.colors.femaleColor[3]}
     self.moveTimer = 0
@@ -95,6 +96,7 @@ function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, fo
     self.forbiddenTimer = 0
     self.glow = false
     self.glowTimer = 0
+    self.combos = {}
     self.color = {Config.colors.femaleColor[1], Config.colors.femaleColor[2], Config.colors.femaleColor[3]}
     self.moveTimer = 0
     self.devilPermanent = false
@@ -105,6 +107,31 @@ function FemaleSnake:spawn(freeCells, playerHead, inForbidden, forbiddenCols, fo
         game:checkDiscovery("event_female_spawn")
     end
     return true
+end
+
+function FemaleSnake:getCombo(key)
+    return self.combos and self.combos[key] or 0
+end
+
+function FemaleSnake:triggerCombo(key)
+    self.combos = self.combos or {}
+    local isActive = false
+    if key == "speed" and self.tempSpeedTimer > 0 and self.speedMultiplier > 1.0 then isActive = true
+    elseif key == "glow" and self.glowTimer > 0 then isActive = true
+    elseif key == "lust" and self.lustTimer > 0 then isActive = true
+    elseif key == "nocollision" and self.noCollisionTimer > 0 then isActive = true
+    elseif key == "slowdown" and self.tempSpeedTimer > 0 and self.speedMultiplier < 1.0 then isActive = true
+    elseif key == "rainbow" and self.rainbowTimer > 0 then isActive = true
+    elseif key == "magnet" and self.magnetTimer > 0 then isActive = true
+    elseif key == "golden" and self.invincibleTimer > 0 then isActive = true
+    end
+
+    if isActive then
+        self.combos[key] = (self.combos[key] or 1) + 1
+    else
+        self.combos[key] = 1
+    end
+    return self.combos[key]
 end
 
 -- BFS pathfinding towards target items
@@ -149,7 +176,7 @@ function FemaleSnake:findPath(start, targets, obstacles, cols, rows)
     return nil
 end
 
-function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, boxes)
+function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, boxes, coin)
     if not self.body or #self.body == 0 then return nil end
     local head = self.body[1]
     local cols = self.inForbidden and Config.forbiddenCols or Config.cols
@@ -175,12 +202,14 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
         table.insert(targets, 1, playerSnake[1])
         if goldenFruit then table.insert(targets, goldenFruit) end
         if greenFruit then table.insert(targets, greenFruit) end
+        if coin then table.insert(targets, coin) end
         if powerUp and powerUp.type == "lustfood" then table.insert(targets, 1, powerUp) end
         if food then table.insert(targets, food) end
     else
         if not self.inForbidden then
             if goldenFruit then table.insert(targets, 1, goldenFruit) end
             if greenFruit then table.insert(targets, greenFruit) end
+            if coin then table.insert(targets, coin) end
             if powerUp and powerUp.type == "lustfood" then table.insert(targets, 1, powerUp) end
             if food then table.insert(targets, food) end
             if powerUp and powerUp.type ~= "lustfood" then table.insert(targets, powerUp) end
@@ -190,6 +219,7 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
             end
             if food then table.insert(targets, food) end
             if greenFruit then table.insert(targets, greenFruit) end
+            if coin then table.insert(targets, coin) end
             if powerUp then table.insert(targets, powerUp) end
             if goldenFruit then table.insert(targets, 1, goldenFruit) end
         end
@@ -221,9 +251,14 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.nextDir = {x = self.direction.x, y = self.direction.y}
         Utils.notify("Snake", "Female U-Turn Paradox!", nil, 1.8)
     elseif ptype == "slowdown" then
+        local combo = self:triggerCombo("slowdown")
         self.speedMultiplier = 0.5
-        self.tempSpeedTimer = Config.frostDuration
-        Utils.notify("Snake", "Female Frost Hourglass! (5s)", nil, 1.8)
+        self.tempSpeedTimer = Config.frostDuration + (combo - 1) * 2.0
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Frost Combo x" .. combo .. "! (" .. string.format("%.0f", self.tempSpeedTimer) .. "s)", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female Frost Hourglass! (5s)", nil, 1.8)
+        end
     elseif ptype == "extralife" then
         if self.lives < self.maxLives then
             self.lives = self.lives + 1
@@ -244,17 +279,27 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.tempSpeedTimer = 3.0
         Utils.notify("Snake", "Female ate Devil's Fruit! Crimson Surge!", nil, 2.0)
     elseif ptype == "lustfood" then
+        local combo = self:triggerCombo("lust")
         self.lustActive = true
-        self.lustTimer = Config.lustDuration
-        Utils.notify("Snake", "Female in Lust Mode! Seeking mate!", nil, 2.0)
+        self.lustTimer = Config.lustDuration + (combo - 1) * 2.5
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Lust Combo x" .. combo .. "! Seeking Mate!", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female in Lust Mode! Seeking mate!", nil, 2.0)
+        end
     elseif ptype == "nocollision" then
+        local combo = self:triggerCombo("nocollision")
         self.noCollision = true
-        self.noCollisionTimer = Config.noCollisionDuration
-        Utils.notify("Snake", "Female Ghost Phase! (4s)", nil, 1.8)
+        self.noCollisionTimer = Config.noCollisionDuration + (combo - 1) * 2.0
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Ghost Combo x" .. combo .. "! (" .. string.format("%.0f", self.noCollisionTimer) .. "s)", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female Ghost Phase! (4s)", nil, 1.8)
+        end
     elseif ptype == "wormhole" then
         local cols = self.inForbidden and Config.forbiddenCols or Config.cols
         local rows = self.inForbidden and Config.forbiddenRows or Config.rows
-        local free = Utils.findFreeCells(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, cols, rows, self.body)
+        local free = Utils.findFreeCells(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, cols, rows, self.body, game.boxes)
         if #free > 0 then
             local newHead = free[math.random(1, #free)]
             local oldHead = self.body[1]
@@ -279,14 +324,25 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         game:addScore(50)
         Utils.notify("Snake", "Female time extended! +30s", nil, 2.0)
     elseif ptype == "rainbow" then
+        local combo = self:triggerCombo("rainbow")
         self.rainbowActive = true
-        self.rainbowTimer = Config.rainbowDuration
-        Utils.notify("Snake", "Female glowing with Rainbow Prism (10s)!", nil, 2.0)
+        self.rainbowTimer = Config.rainbowDuration + (combo - 1) * 3.0
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Rainbow Combo x" .. combo .. "! (10s)", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female glowing with Rainbow Prism (10s)!", nil, 2.0)
+        end
     elseif ptype == "speedfood" then
-        game:addScore(50)
-        self.speedMultiplier = Config.speedFoodMultiplier
+        local combo = self:triggerCombo("speed")
+        local speedBonus = (combo - 1) * 0.4
+        self.speedMultiplier = Config.speedFoodMultiplier + speedBonus
         self.tempSpeedTimer = Config.speedFoodDuration
-        Utils.notify("Snake", "Female Lightning Speed Boost (5s)!", nil, 2.0)
+        game:addScore(50 * combo)
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Speed Combo x" .. combo .. "! (" .. string.format("%.1f", self.speedMultiplier) .. "x Speed)", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female Lightning Speed Boost (5s)!", nil, 2.0)
+        end
     elseif ptype == "stopfood" then
         self.stopTimer = Config.stopDuration
         Utils.notify("Snake", "Female Frozen for 5s!", nil, 2.0)
@@ -299,10 +355,15 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.blackholeTimer = Config.holeEffectDuration
         Utils.notify("Snake", "Female Blackhole Attraction (5s)!", nil, 2.0)
     elseif ptype == "magnet" then
+        local combo = self:triggerCombo("magnet")
         self.magnetActive = true
-        self.magnetTimer = Config.magnetDuration
+        self.magnetTimer = Config.magnetDuration + (combo - 1) * 3.0
         self.magnetStepTimer = 0
-        Utils.notify("Snake", "Female Cosmic Magnet (6s)!", nil, 2.0)
+        if combo > 1 then
+            Utils.notify("Combo!", "Female Magnet Combo x" .. combo .. "! (" .. string.format("%.0f", self.magnetTimer) .. "s Pull)", nil, 2.0)
+        else
+            Utils.notify("Snake", "Female Cosmic Magnet (6s)!", nil, 2.0)
+        end
     elseif ptype == "fourthwall" then
         game:checkDiscovery("event_fourth_wall")
         game.fourthWallActive = true
@@ -330,13 +391,19 @@ function FemaleSnake:applyPowerUp(powerUp, game)
 end
 
 function FemaleSnake:applyGoldenFruit(fruit, game)
+    local combo = self:triggerCombo("golden")
     if self.lives < self.maxLives then
         self.lives = self.lives + 1
     end
-    game:addScore(250)
+    local pts = 250 * combo
+    game:addScore(pts)
     self.invincible = true
-    self.invincibleTimer = 3.0
-    Utils.notify("Snake", "Female ate Golden Apple! +250 & Life!", nil, 2.0)
+    self.invincibleTimer = 3.0 + (combo - 1) * 1.5
+    if combo > 1 then
+        Utils.notify("Combo!", "Female Golden Combo x" .. combo .. "! +" .. pts .. " pts & Shield!", nil, 2.2)
+    else
+        Utils.notify("Snake", "Female ate Golden Apple! +250 & Life!", nil, 2.0)
+    end
     Utils.playSFX("levelup", 2.0, 0.9)
 end
 
@@ -353,19 +420,35 @@ function FemaleSnake:update(dt, game)
 
     if self.invincible then
         self.invincibleTimer = self.invincibleTimer - dt
-        if self.invincibleTimer <= 0 then self.invincible = false end
+        if self.invincibleTimer <= 0 then
+            self.invincible = false
+            if self.combos then self.combos.golden = 0 end
+        end
     end
     if self.noCollision then
         self.noCollisionTimer = self.noCollisionTimer - dt
-        if self.noCollisionTimer <= 0 then self.noCollision = false end
+        if self.noCollisionTimer <= 0 then
+            self.noCollision = false
+            if self.combos then self.combos.nocollision = 0 end
+        end
     end
     if self.lustActive then
         self.lustTimer = self.lustTimer - dt
-        if self.lustTimer <= 0 then self.lustActive = false end
+        if self.lustTimer <= 0 then
+            self.lustActive = false
+            if self.combos then self.combos.lust = 0 end
+        end
     end
     if self.tempSpeedTimer > 0 then
         self.tempSpeedTimer = self.tempSpeedTimer - dt
-        if self.tempSpeedTimer <= 0 then self.speedMultiplier = 1.0 end
+        if self.tempSpeedTimer <= 0 then
+            self.speedMultiplier = 1.0
+            if self.combos then
+                self.combos.speed = 0
+                self.combos.slowdown = 0
+                self.combos.glow = 0
+            end
+        end
     end
     if self.stopTimer > 0 then
         self.stopTimer = self.stopTimer - dt
@@ -373,11 +456,17 @@ function FemaleSnake:update(dt, game)
     end
     if self.rainbowActive then
         self.rainbowTimer = self.rainbowTimer - dt
-        if self.rainbowTimer <= 0 then self.rainbowActive = false end
+        if self.rainbowTimer <= 0 then
+            self.rainbowActive = false
+            if self.combos then self.combos.rainbow = 0 end
+        end
     end
     if self.glow then
         self.glowTimer = self.glowTimer - dt
-        if self.glowTimer <= 0 then self.glow = false end
+        if self.glowTimer <= 0 then
+            self.glow = false
+            if self.combos then self.combos.glow = 0 end
+        end
     end
     if self.inForbidden then
         self.forbiddenTimer = self.forbiddenTimer - dt
@@ -417,7 +506,7 @@ function FemaleSnake:update(dt, game)
                         end
                         nx = math.max(1, math.min(cols, nx))
                         ny = math.max(1, math.min(rows, ny))
-                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item, game.boxes) then
                             item.x = nx
                             item.y = ny
                         end
@@ -429,6 +518,7 @@ function FemaleSnake:update(dt, game)
             repelItem(game.powerUp)
             repelItem(game.greenFruit)
             repelItem(game.goldenFruit)
+            repelItem(game.coin)
             if self.inForbidden then
                 for _, f in ipairs(game.forbiddenFoods or {}) do repelItem(f) end
             end
@@ -460,7 +550,7 @@ function FemaleSnake:update(dt, game)
                         end
                         nx = math.max(1, math.min(cols, nx))
                         ny = math.max(1, math.min(rows, ny))
-                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item) then
+                        if Utils.isEmptyCell(nx, ny, game.snake, self.body, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, item, game.boxes) then
                             item.x = nx
                             item.y = ny
                         end
@@ -472,6 +562,7 @@ function FemaleSnake:update(dt, game)
             attractItem(game.powerUp)
             attractItem(game.greenFruit)
             attractItem(game.goldenFruit)
+            attractItem(game.coin)
             if self.inForbidden then
                 for _, f in ipairs(game.forbiddenFoods or {}) do attractItem(f) end
             end
@@ -516,6 +607,7 @@ function FemaleSnake:update(dt, game)
                 pullItem(game.food)
                 pullItem(game.greenFruit)
                 pullItem(game.goldenFruit)
+                pullItem(game.coin)
                 if self.inForbidden then
                     for _, f in ipairs(game.forbiddenFoods or {}) do pullItem(f) end
                 end
@@ -535,7 +627,7 @@ function FemaleSnake:update(dt, game)
             local cols = self.inForbidden and Config.forbiddenCols or Config.cols
             local rows = self.inForbidden and Config.forbiddenRows or Config.rows
 
-            local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, game.boxes)
+            local dir = self:getDirection(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, game.boxes, game.coin)
             if dir then
                 self.nextDir = dir
             else
@@ -674,16 +766,32 @@ function FemaleSnake:update(dt, game)
                     ate = true
                 end
                 if game.greenFruit and checkFemaleItemHit(game.greenFruit) then
-                    local pts = 200 * (self.lustActive and Config.lustMultiplier or 1)
+                    local combo = self:triggerCombo("glow")
+                    local pts = 200 * combo * (self.lustActive and Config.lustMultiplier or 1)
                     game:addScore(pts)
                     self.glow = true
-                    self.glowTimer = Config.glowDuration
-                    self.speedMultiplier = self.speedMultiplier + 0.6
-                    self.tempSpeedTimer = Config.glowDuration
+                    self.glowTimer = Config.glowDuration + (combo - 1) * 2.0
+                    self.speedMultiplier = 1.0 + 0.6 * combo
+                    self.tempSpeedTimer = self.glowTimer
                     game.greenFruit = nil
                     game.greenFruitTimer = 0
                     Utils.playSFX("levelup", 1.8, 0.8)
-                    Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+                    if combo > 1 then
+                        Utils.notify("Combo!", "Female Glow Combo x" .. combo .. "! (+" .. string.format("%.1f", self.speedMultiplier) .. "x Speed)", nil, 2.0)
+                    else
+                        Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+                    end
+                    ate = true
+                end
+                if game.coin and checkFemaleItemHit(game.coin) then
+                    local Storage = require("storage")
+                    local totalCoins = Storage.addCoins(1)
+                    if game.coins then game.coins = totalCoins end
+                    if game.checkDiscovery then game:checkDiscovery("coin") end
+                    Utils.playSFX("levelup", 2.2, 0.7)
+                    Utils.notify("Coin Harvest!", "Female collected Gold Coin! +1 Coin (Total: " .. totalCoins .. ")", nil, 2.0)
+                    game.coin = nil
+                    game.coinTimer = 0
                     ate = true
                 end
                 if game.powerUp and checkFemaleItemHit(game.powerUp) then

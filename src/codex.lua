@@ -29,6 +29,13 @@ Codex.items = {
         points = "+250 pts & Life",
         desc = "Legendary jackpot harvest! Grants +250 points, +1 Extra Life, and a 3-second golden invincibility shield."
     },
+    {
+        key = "coin",
+        name = "Gold Coin",
+        category = "Currency",
+        points = "+1 Coin (Shop Currency)",
+        desc = "Shimmering gold currency harvested on the board. Spend your collected coins in the Upgrades Shop for permanent fruit and power-up boosts!"
+    },
 
     -- Tactical Utility
     {
@@ -316,6 +323,47 @@ function Codex.drawIcon(key, x, y, size)
         love.graphics.rectangle("fill", x + 3, y + 4, 4, 4, 2, 2)
         love.graphics.setColor(1.0, 0.95, 0.4)
         love.graphics.rectangle("fill", x + size / 2, y, 4, 3, 1, 1)
+
+    elseif key == "coin" then
+        -- Shimmering Golden Coin with inner rim & glint
+        local cx = x + size / 2
+        local cy = y + size / 2
+        local rad = size / 2
+        local pulse = 0.35 + 0.15 * math.sin(time * 6)
+        
+        -- Golden aura glow
+        love.graphics.setColor(1.0, 0.85, 0.2, pulse)
+        love.graphics.circle("fill", cx, cy, rad + 2)
+
+        -- Coin outer rim
+        love.graphics.setColor(0.85, 0.65, 0.0)
+        love.graphics.circle("fill", cx, cy, rad - 0.5)
+
+        -- Coin face (bright gold)
+        love.graphics.setColor(1.0, 0.84, 0.1)
+        love.graphics.circle("fill", cx, cy, rad - 2)
+
+        -- Inner embossed circle
+        love.graphics.setColor(0.9, 0.72, 0.05)
+        love.graphics.circle("line", cx, cy, rad - 3.5)
+
+        -- Central Star / Glyph
+        love.graphics.setColor(1.0, 0.95, 0.6)
+        local starR = math.max(2, rad * 0.4)
+        love.graphics.polygon("fill",
+            cx, cy - starR,
+            cx + starR * 0.35, cy - starR * 0.35,
+            cx + starR, cy,
+            cx + starR * 0.35, cy + starR * 0.35,
+            cx, cy + starR,
+            cx - starR * 0.35, cy + starR * 0.35,
+            cx - starR, cy,
+            cx - starR * 0.35, cy - starR * 0.35
+        )
+
+        -- Specular highlight glint
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.9)
+        love.graphics.circle("fill", cx - rad * 0.35, cy - rad * 0.35, math.max(1, rad * 0.2))
 
     elseif key == "shorten" then
         -- Purple Scissors / Cutter

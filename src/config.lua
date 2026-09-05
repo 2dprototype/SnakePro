@@ -53,6 +53,8 @@ Config.greenFruitDuration = 5.0
 Config.goldenFruitSpawnInterval = 25.0
 Config.goldenFruitDuration = 4.0
 Config.forbiddenFoodDuration = 5.0
+Config.coinSpawnInterval = 14.0
+Config.coinDuration = 8.0
 
 -- Female Snake Parameters
 Config.femaleDuration = 300 -- 5 minutes
@@ -122,6 +124,8 @@ Config.colors = {
     physicsfruit = {0.95, 0.8, 0.1},
     box          = {0.68, 0.42, 0.22},
     boxBorder   = {0.38, 0.22, 0.08},
+    coin         = {1.0, 0.84, 0.0},
+    coinBorder   = {0.85, 0.65, 0.0},
 
     -- Snake Defaults
     snakeHead   = {0.6, 0.95, 0.3},
@@ -129,6 +133,120 @@ Config.colors = {
     devilSkin   = {0.95, 0.1, 0.1},
     femaleColor = {1.0, 0.4, 0.7},
     immortalGold= {0.85, 0.7, 0.2}
+}
+
+-- Permanent Upgrades Catalog (Purchasable with Coins)
+Config.upgrades = {
+    {
+        id = "apple_value",
+        name = "Apple Yield",
+        iconKey = "food",
+        category = "Fruits",
+        desc = "Increases score points awarded by standard red apples.",
+        unit = "pts",
+        maxLevel = 5,
+        costs = {5, 10, 20, 35, 50},
+        values = {10, 15, 20, 25, 35}
+    },
+    {
+        id = "green_duration",
+        name = "Lime Glow Duration",
+        iconKey = "greenfruit",
+        category = "Fruits",
+        desc = "Extends the duration of Lime Green Apple's energetic glow and speed boost.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {8, 15, 25, 40, 60},
+        values = {5.0, 6.5, 8.0, 10.0, 12.0}
+    },
+    {
+        id = "green_spawn",
+        name = "Lime Apple Spawn Rate",
+        iconKey = "greenfruit",
+        category = "Fruits",
+        desc = "Causes glowing Lime Green Apples to spawn much more frequently on the board.",
+        unit = "s interval",
+        maxLevel = 5,
+        costs = {10, 20, 35, 50, 75},
+        values = {8.0, 7.0, 6.0, 5.0, 4.0}
+    },
+    {
+        id = "golden_duration",
+        name = "Golden Shield Duration",
+        iconKey = "goldenfruit",
+        category = "Fruits",
+        desc = "Extends the duration of Golden Apple's invincibility shield.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {12, 25, 45, 70, 100},
+        values = {3.0, 4.0, 5.5, 7.0, 9.0}
+    },
+    {
+        id = "golden_spawn",
+        name = "Golden Apple Spawn Rate",
+        iconKey = "goldenfruit",
+        category = "Fruits",
+        desc = "Shortens spawn delay between legendary Golden Apples appearing.",
+        unit = "s interval",
+        maxLevel = 5,
+        costs = {15, 30, 50, 80, 120},
+        values = {25.0, 21.0, 17.0, 14.0, 11.0}
+    },
+    {
+        id = "speed_duration",
+        name = "Thunder Surge Duration",
+        iconKey = "speedfood",
+        category = "Power-ups",
+        desc = "Extends the duration of lightning speed boost from Thunder Surge power-up.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {8, 15, 25, 40, 60},
+        values = {5.0, 6.5, 8.0, 9.5, 12.0}
+    },
+    {
+        id = "ghost_duration",
+        name = "Ghost Phase Duration",
+        iconKey = "nocollision",
+        category = "Power-ups",
+        desc = "Extends how long the snake can phase straight through its own body safely.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {8, 15, 25, 40, 60},
+        values = {4.0, 5.5, 7.0, 8.5, 10.0}
+    },
+    {
+        id = "magnet_duration",
+        name = "Cosmic Magnet Duration",
+        iconKey = "magnet",
+        category = "Power-ups",
+        desc = "Extends the duration of the Cosmic Magnet food vacuum field.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {10, 20, 35, 55, 80},
+        values = {6.0, 8.0, 10.0, 12.5, 15.0}
+    },
+    {
+        id = "lust_duration",
+        name = "Lust Berry Duration",
+        iconKey = "lustfood",
+        category = "Power-ups",
+        desc = "Extends the active duration of Lust Mode and 3x multiplier.",
+        unit = "s",
+        maxLevel = 5,
+        costs = {10, 20, 35, 55, 80},
+        values = {5.0, 6.5, 8.0, 9.5, 11.0}
+    },
+    {
+        id = "coin_spawn",
+        name = "Coin Fortune",
+        iconKey = "coin",
+        category = "Currency",
+        desc = "Increases Gold Coin appearance frequency across the arena.",
+        unit = "s interval",
+        maxLevel = 5,
+        costs = {10, 20, 35, 50, 75},
+        values = {14.0, 11.5, 9.0, 7.0, 5.0}
+    }
 }
 
 return Config

@@ -70,7 +70,7 @@ function love.draw()
     elseif _G.GameState == "paused" then
         _G.GameInstance:draw(0, 0, w, h)
         _G.MenuInstance:draw(w, h, _G.GameInstance)
-    elseif _G.GameState == "main_menu" or _G.GameState == "controls" or _G.GameState == "status" then
+    elseif _G.GameState == "main_menu" or _G.GameState == "controls" or _G.GameState == "status" or _G.GameState == "shop" then
         _G.MenuInstance:draw(w, h, _G.GameInstance)
     end
 end
@@ -87,14 +87,24 @@ function love.keypressed(key)
             end
             return
         elseif _G.GameState == "paused" then
-            _G.GameState = "playing"
-            return
-        elseif _G.GameState == "controls" or _G.GameState == "status" then
+            if _G.MenuInstance.state == "shop" or _G.MenuInstance.state == "status" or _G.MenuInstance.state == "controls" then
+                _G.MenuInstance:setState(_G.MenuInstance.previousState or "pause_menu")
+                return
+            else
+                _G.GameState = "playing"
+                return
+            end
+        elseif _G.GameState == "controls" or _G.GameState == "status" or _G.GameState == "shop" then
             _G.MenuInstance:setState(_G.MenuInstance.previousState or "main_menu")
             return
         elseif _G.GameState == "main_menu" then
-            love.event.quit()
-            return
+            if _G.MenuInstance.state == "shop" or _G.MenuInstance.state == "status" or _G.MenuInstance.state == "controls" then
+                _G.MenuInstance:setState(_G.MenuInstance.previousState or "main_menu")
+                return
+            else
+                love.event.quit()
+                return
+            end
         end
     end
 

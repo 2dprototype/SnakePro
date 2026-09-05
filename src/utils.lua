@@ -76,7 +76,7 @@ function Utils.toUintColor(colorArr, alpha)
 end
 
 -- Find all unoccupied grid coordinates
-function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake, boxes)
+function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, cols, rows, femaleSnake, boxes, coin)
     local free = {}
     for r = 1, rows do
         for c = 1, cols do
@@ -95,6 +95,7 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
             if not occ and powerUp and powerUp.x == c and powerUp.y == r then occ = true end
             if not occ and greenFruit and greenFruit.x == c and greenFruit.y == r then occ = true end
             if not occ and goldenFruit and goldenFruit.x == c and goldenFruit.y == r then occ = true end
+            if not occ and coin and coin.x == c and coin.y == r then occ = true end
             if not occ and forbiddenFoods then
                 for _, ff in ipairs(forbiddenFoods) do
                     if ff.x == c and ff.y == r then occ = true; break end
@@ -114,7 +115,7 @@ function Utils.findFreeCells(snake, food, powerUp, greenFruit, goldenFruit, forb
 end
 
 -- Check if a specific cell (x, y) is empty
-function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, excludeItem, boxes)
+function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, goldenFruit, forbiddenFoods, excludeItem, boxes, coin)
     if snake then
         for _, seg in ipairs(snake) do
             if seg.x == x and seg.y == y then return false end
@@ -134,6 +135,7 @@ function Utils.isEmptyCell(x, y, snake, femaleSnake, food, powerUp, greenFruit, 
     if powerUp and excludeItem ~= powerUp and powerUp.x == x and powerUp.y == y then return false end
     if greenFruit and excludeItem ~= greenFruit and greenFruit.x == x and greenFruit.y == y then return false end
     if goldenFruit and excludeItem ~= goldenFruit and goldenFruit.x == x and goldenFruit.y == y then return false end
+    if coin and excludeItem ~= coin and coin.x == x and coin.y == y then return false end
     if forbiddenFoods then
         for _, f in ipairs(forbiddenFoods) do
             if excludeItem ~= f and f.x == x and f.y == y then return false end
