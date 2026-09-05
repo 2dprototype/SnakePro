@@ -134,13 +134,17 @@ function Storage.markDiscovered(itemKey)
     return false
 end
 
-function Storage.getDiscoveredCount(totalItems)
+function Storage.getDiscoveredCount(totalItems, validKeys)
     if not Storage.data then Storage.load() end
     local count = 0
-    for _ in pairs(Storage.data.discoveredItems or {}) do
-        count = count + 1
+    for k, v in pairs(Storage.data.discoveredItems or {}) do
+        if v == true then
+            if not validKeys or validKeys[k] then
+                count = count + 1
+            end
+        end
     end
-    return count, totalItems or 28
+    return count, totalItems or 24
 end
 
 -- Match history & career statistics

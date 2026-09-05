@@ -18,9 +18,11 @@ Config.minSpeed = 0.06
 Config.initialLives = 3
 Config.maxLives = 5
 Config.invincibleDuration = 2.0
-Config.noCollisionDuration = 3.0
+Config.noCollisionDuration = 4.0
 Config.glowDuration = 5.0
-Config.rainbowDuration = 10.0
+Config.rainbowDuration = 6.0
+Config.frostDuration = 5.0
+Config.magnetDuration = 6.0
 Config.lustDuration = 5.0
 Config.lustMultiplier = 3
 Config.holeEffectDuration = 5.0
@@ -34,8 +36,8 @@ Config.powerUpSpawnInterval = 7.0
 Config.powerUpDuration = 6.0
 Config.greenFruitSpawnInterval = 8.0
 Config.greenFruitDuration = 5.0
-Config.goldenFruitSpawnInterval = 30.0
-Config.goldenFruitDuration = 3.0
+Config.goldenFruitSpawnInterval = 25.0
+Config.goldenFruitDuration = 4.0
 
 -- Female Snake Parameters
 Config.femaleDuration = 300 -- 5 minutes
@@ -43,24 +45,23 @@ Config.femaleLives = 3
 Config.femaleMaxLives = 5
 Config.matingCooldownMax = 10.0
 
--- Power-up Type Registry
+-- Power-up Type Registry (Curated Roster + Requested Classical Powers)
 Config.powerUpTypes = {
     "shorten",
     "reverse",
-    "speedup",
+    "nocollision",
     "slowdown",
     "extralife",
-    "scoreboost",
-    "colorchange",
     "devilfruit",
-    "lustfood",
-    "nocollision",
-    "forbidden",
-    "mate",
     "rainbow",
-    "wormhole",
+    "magnet",
+    "colorchange",
     "whitehole",
     "blackhole",
+    "wormhole",
+    "mate",
+    "lustfood",
+    "forbidden",
     "fourthwall",
     "fifthwall"
 }
@@ -68,40 +69,37 @@ Config.powerUpTypes = {
 -- Color Palettes
 Config.colors = {
     -- Foods
-    food = {0.95, 0.2, 0.2},
-    greenfruit = {0.5, 1.0, 0.3},
+    food        = {0.95, 0.25, 0.25},
+    greenfruit  = {0.5, 1.0, 0.3},
     goldenfruit = {1.0, 0.85, 0.2},
 
-    -- Forbidden Foods
-    forbidden_food_1 = {0.13, 0.55, 0.13}, -- green
-    forbidden_food_2 = {0.95, 0.85, 0.1},  -- yellow
-    forbidden_food_3 = {0.8, 0.2, 0.9},    -- purple
-    forbidden_food_4 = {0.2, 0.9, 0.9},    -- cyan (adds time)
+    -- Forbidden Shards
+    forbidden_food_1 = {0.2, 0.9, 0.4},  -- Cosmic Shard (Emerald)
+    forbidden_food_2 = {0.2, 0.85, 1.0}, -- Chrono Shard (Cyan)
 
     -- Power-ups
     shorten     = {0.8, 0.4, 0.9},
     reverse     = {0.2, 0.9, 0.9},
-    speedup     = {0.9, 0.9, 0.2},
-    slowdown    = {0.2, 0.4, 0.9},
-    extralife   = {0.9, 0.2, 0.6},
-    scoreboost  = {0.9, 0.6, 0.2},
+    nocollision = {0.0, 1.0, 0.6},
+    slowdown    = {0.3, 0.7, 1.0},
+    extralife   = {0.95, 0.2, 0.5},
+    devilfruit  = {0.95, 0.1, 0.1},
+    rainbow     = {0.9, 0.2, 0.9},
+    magnet      = {0.15, 0.15, 0.25},
     colorchange = {0.2, 0.9, 0.6},
-    devilfruit  = {0.9, 0.1, 0.1},
-    lustfood    = {1.0, 0.08, 0.58},
-    nocollision = {0.0, 1.0, 0.5},
-    forbidden   = {0.5, 0.1, 0.5},
-    mate        = {1.0, 0.4, 0.7},
-    rainbow     = {0.9, 0.1, 0.8},
-    wormhole    = {0.19, 0.10, 0.20},
     whitehole   = {1.0, 1.0, 1.0},
     blackhole   = {0.0, 0.0, 0.0},
+    wormhole    = {0.19, 0.10, 0.20},
+    mate        = {1.0, 0.4, 0.7},
+    lustfood    = {1.0, 0.08, 0.58},
+    forbidden   = {0.6, 0.1, 0.8},
     fourthwall  = {0.0, 0.8, 0.8},
-    fifthwall   = {0.0, 1.0, 0.0},
+    fifthwall   = {0.0, 1.0, 0.4},
 
     -- Snake Defaults
     snakeHead   = {0.6, 0.95, 0.3},
     snakeBody   = {0.35, 0.85, 0.2},
-    devilSkin   = {0.9, 0.1, 0.1},
+    devilSkin   = {0.95, 0.1, 0.1},
     femaleColor = {1.0, 0.4, 0.7},
     immortalGold= {0.85, 0.7, 0.2}
 }

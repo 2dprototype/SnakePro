@@ -328,7 +328,7 @@ function Menu:draw(width, height, game)
             {"Movement:", "W A S D / Arrow Keys / Swipe"},
             {"Pause Menu:", "[ESC] - Pause / Resume / Exit"},
             {"Quick Restart:", "[R] Key"},
-            {"Debug Spawn:", "Type [1-28] + Enter at mouse"},
+            {"Debug Spawn:", "Type [1-22] + Enter at mouse"},
             {"Immortal Ending:", "Bite your own tail!"},
             {"5th Wall Break:", "Escape the game window into desktop"}
         }
@@ -367,7 +367,7 @@ function Menu:draw(width, height, game)
         love.graphics.rectangle("line", 20, tabY, tabW, tabH, 4, 4)
         love.graphics.setFont(self.smallFont)
         love.graphics.setColor(isTab1 and {1, 1, 1} or {0.7, 0.7, 0.7})
-        local discCount, totalCount = Storage.getDiscoveredCount(#Codex.items)
+        local discCount, totalCount = Storage.getDiscoveredCount(#Codex.items, Codex.byKey)
         love.graphics.printf("DISCOVERIES (" .. discCount .. "/" .. totalCount .. ")", 20, tabY + 6, tabW, "center")
         table.insert(self.tabRects, {x = 20, y = tabY, w = tabW, h = tabH, tabId = 1})
 

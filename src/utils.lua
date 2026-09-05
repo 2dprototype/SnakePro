@@ -42,6 +42,14 @@ function Utils.hsvToRgb(h, s, v)
     return r, g, b
 end
 
+-- Get live animated Prism Dye color at current time
+function Utils.getPrismColor(timeOffset)
+    local t = ((love.timer and love.timer.getTime() or os.clock()) + (timeOffset or 0)) * 0.75
+    local hue = t % 1.0
+    local r, g, b = Utils.hsvToRgb(hue, 0.95, 1.0)
+    return {r, g, b}
+end
+
 -- Convert [0,1] RGB or RGBA array to 32-bit ARGB uint for SDL2 surfaces
 function Utils.toUintColor(colorArr, alpha)
     local a = math.floor((alpha or colorArr[4] or 1.0) * 255)

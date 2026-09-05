@@ -148,15 +148,15 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
     local targets = {}
     if self.lustActive and not self.inForbidden and playerSnake and playerSnake[1] then
         table.insert(targets, 1, playerSnake[1])
+        if goldenFruit then table.insert(targets, goldenFruit) end
+        if greenFruit then table.insert(targets, greenFruit) end
         if powerUp and powerUp.type == "lustfood" then table.insert(targets, powerUp) end
         if food then table.insert(targets, food) end
-        if greenFruit then table.insert(targets, greenFruit) end
-        if goldenFruit then table.insert(targets, goldenFruit) end
     else
         if not self.inForbidden then
             if goldenFruit then table.insert(targets, 1, goldenFruit) end
+            if greenFruit then table.insert(targets, greenFruit) end
             if powerUp and powerUp.type == "lustfood" then table.insert(targets, 1, powerUp) end
-            if greenFruit then table.insert(targets, 1, greenFruit) end
             if food then table.insert(targets, food) end
             if powerUp and powerUp.type ~= "lustfood" then table.insert(targets, powerUp) end
         else
@@ -164,8 +164,8 @@ function FemaleSnake:getDirection(playerSnake, food, powerUp, greenFruit, golden
                 table.insert(targets, f)
             end
             if food then table.insert(targets, food) end
+            if greenFruit then table.insert(targets, greenFruit) end
             if powerUp then table.insert(targets, powerUp) end
-            if greenFruit then table.insert(targets, 1, greenFruit) end
             if goldenFruit then table.insert(targets, 1, goldenFruit) end
         end
     end
@@ -193,24 +193,20 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         self.body = reversed
         self.direction = {x = -self.direction.x, y = -self.direction.y}
         self.nextDir = {x = self.direction.x, y = self.direction.y}
-    elseif ptype == "speedup" then
-        self.speedMultiplier = self.speedMultiplier + 0.8
-        self.tempSpeedTimer = 4.0
     elseif ptype == "slowdown" then
         self.speedMultiplier = 0.5
-        self.tempSpeedTimer = 4.0
+        self.tempSpeedTimer = Config.frostDuration
     elseif ptype == "extralife" then
         if self.lives < self.maxLives then self.lives = self.lives + 1 end
-    elseif ptype == "scoreboost" then
-        game:addScore(50)
     elseif ptype == "colorchange" then
         self.devilPermanent = false
-        self.color = Utils.randomColor()
+        self.color = Utils.getPrismColor(0)
+        Utils.notify("Snake", "Female absorbed live prism hue!", nil, 1.8)
     elseif ptype == "devilfruit" then
         game:addScore(100)
         self.devilPermanent = true
         self.color = self.devilColor
-        self.speedMultiplier = 1.5
+        self.speedMultiplier = 1.4
         self.tempSpeedTimer = 3.0
     elseif ptype == "lustfood" then
         self.lustActive = true
@@ -218,6 +214,24 @@ function FemaleSnake:applyPowerUp(powerUp, game)
     elseif ptype == "nocollision" then
         self.noCollision = true
         self.noCollisionTimer = Config.noCollisionDuration
+    elseif ptype == "wormhole" then
+        local cols = self.inForbidden and Config.forbiddenCols or Config.cols
+        local rows = self.inForbidden and Config.forbiddenRows or Config.rows
+        local free = Utils.findFreeCells(game.snake, game.food, game.powerUp, game.greenFruit, game.goldenFruit, game.forbiddenFoods, cols, rows, self.body)
+        if #free > 0 then
+            local newHead = free[math.random(1, #free)]
+            local oldHead = self.body[1]
+            local offX = newHead.x - oldHead.x
+            local offY = newHead.y - oldHead.y
+            for _, seg in ipairs(self.body) do
+                seg.x = seg.x + offX
+                seg.y = seg.y + offY
+                while seg.x < 1 do seg.x = seg.x + cols end
+                while seg.x > cols do seg.x = seg.x - cols end
+                while seg.y < 1 do seg.y = seg.y + rows end
+                while seg.y > rows do seg.y = seg.y - rows end
+            end
+        end
     elseif ptype == "forbidden" then
         if not self.inForbidden then
             self.inForbidden = true
@@ -237,28 +251,20 @@ function FemaleSnake:applyPowerUp(powerUp, game)
         game:addScore(50)
         Utils.notify("Snake", "Female time extended!", nil, 2.0)
     elseif ptype == "rainbow" then
-        if self.devilPermanent then
-            self.color = self.devilColor
-        else
-            self.color = Utils.randomColor()
-        end
+        self.invincible = true
+        self.invincibleTimer = Config.rainbowDuration
     end
     Utils.playSFX("tick", 1.0, 0.3)
 end
 
 function FemaleSnake:applyGoldenFruit(fruit, game)
-    local ftype = (fruit and fruit.type) or 1
-    if ftype == 1 then
-        self.lives = math.min(self.lives + 1, self.maxLives)
-        Utils.notify("Snake", "Female got extra life from Golden Fruit!", nil, 2.0)
-    elseif ftype == 2 then
-        game:addScore(500)
-        Utils.notify("Snake", "Female +500 points from Golden Fruit!", nil, 2.0)
-    else
-        self.invincible = true
-        self.invincibleTimer = 5.0
-        Utils.notify("Snake", "Female got invincibility from Golden Fruit!", nil, 2.0)
+    if self.lives < self.maxLives then
+        self.lives = self.lives + 1
     end
+    game:addScore(250)
+    self.invincible = true
+    self.invincibleTimer = 3.0
+    Utils.notify("Snake", "Female ate Golden Apple! +250 & Life!", nil, 2.0)
     Utils.playSFX("levelup", 2.0, 0.9)
 end
 
@@ -387,19 +393,22 @@ function FemaleSnake:update(dt, game)
                 game:spawnFood()
                 ate = true
             end
-            if game.powerUp and newHead.x == game.powerUp.x and newHead.y == game.powerUp.y then
-                self:applyPowerUp(game.powerUp, game)
-                game.powerUp = nil
-                ate = true
-            end
             if game.greenFruit and newHead.x == game.greenFruit.x and newHead.y == game.greenFruit.y then
-                game:addScore(200)
+                local pts = 200 * (self.lustActive and Config.lustMultiplier or 1)
+                game:addScore(pts)
                 self.glow = true
                 self.glowTimer = Config.glowDuration
+                self.speedMultiplier = self.speedMultiplier + 0.6
+                self.tempSpeedTimer = Config.glowDuration
                 game.greenFruit = nil
                 game.greenFruitTimer = 0
                 Utils.playSFX("levelup", 1.8, 0.8)
-                Utils.notify("Snake", "Female ate LIME GREEN FRUIT! +200 and pink glow!", nil, 2.0)
+                Utils.notify("Snake", "Female ate Lime Green Apple! Glow & Speed!", nil, 2.0)
+                ate = true
+            end
+            if game.powerUp and newHead.x == game.powerUp.x and newHead.y == game.powerUp.y then
+                self:applyPowerUp(game.powerUp, game)
+                game.powerUp = nil
                 ate = true
             end
             if game.goldenFruit and newHead.x == game.goldenFruit.x and newHead.y == game.goldenFruit.y then
@@ -412,14 +421,14 @@ function FemaleSnake:update(dt, game)
             for i = #game.forbiddenFoods, 1, -1 do
                 local f = game.forbiddenFoods[i]
                 if newHead.x == f.x and newHead.y == f.y then
-                    if f.type == 4 then
-                        game.forbiddenTimer = math.min(game.forbiddenTimer + 2.0, 12.0)
-                        Utils.playSFX("levelup", 1.0, 0.6)
-                        Utils.notify("Snake", "+2s in Forbidden Realm!", nil, 1.5)
+                    if f.type == 2 then
+                        game.forbiddenTimer = math.min(game.forbiddenTimer + 2.5, 15.0)
+                        Utils.playSFX("levelup", 1.2, 0.6)
+                        Utils.notify("Snake", "+2.5s in Forbidden Realm!", nil, 1.5)
                     else
-                        local pts = (f.type == 1 and 15 or (f.type == 2 and 30 or 50)) * (self.lustActive and Config.lustMultiplier or 1)
+                        local pts = 30 * (self.lustActive and Config.lustMultiplier or 1)
                         game:addScore(pts)
-                        Utils.playSFX("tick", 1.5 + f.type * 0.2, 0.5)
+                        Utils.playSFX("tick", 1.6, 0.5)
                     end
                     table.remove(game.forbiddenFoods, i)
                     ate = true
